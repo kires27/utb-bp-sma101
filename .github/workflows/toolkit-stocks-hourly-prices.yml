@@ -14,8 +14,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: BP/sma101
 
       - uses: actions/setup-python@v6
         with:
