@@ -1,0 +1,160 @@
+/* =============================================================================
+   MEIC — Global Design System
+============================================================================= */
+
+@font-face {
+	font-family: "Manrope";
+	src: url("/fonts/Manrope/Manrope-VariableFont_wght.ttf") format("woff2");
+	font-weight: 200 800;
+	font-style: normal;
+	font-display: swap;
+}
+
+/* =============================================================================
+   TOKENS
+============================================================================= */
+
+:root {
+
+	/* Backgrounds */
+	--bg: #0c0c0f;
+	--bg-2: rgb(19, 19, 23);
+	--bg-card: #131318;
+	--bg-hover: #1a1a20;
+
+	/* Borders */
+	--border: rgba(255, 255, 255, 0.09);
+	--border-hi: rgba(255, 255, 255, 0.12);
+
+	/* Foreground */
+	--fg: #e8e8e0;
+	--fg-2: #888880;
+	--fg-3: #555550;
+
+	/* Accent colors */
+	--teal: #4db89e;
+	--teal-dim: rgba(77, 184, 158, 0.12);
+	--teal-border: rgba(77, 184, 158, 0.30);
+	--purple: #8b7ec8;
+	--gold: #c4a96a;
+	--rose: #c47a7a;
+	--rose-dim: rgba(196, 122, 122, 0.12);
+	--blue: #5b9bd5;
+
+	/* Typography */
+	/* alternative: Inter, Roboto Mono */
+	--font-main: 'Manrope', monospace;
+	--font-secondary: "";
+
+	/* Misc */
+	--container-max: 1180px;
+	--transition: all 0.15s ease;
+}
+
+
+/* =============================================================================
+   RESET
+============================================================================= */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+html {
+	scroll-behavior: smooth;
+}
+
+body {
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--font-main);
+	font-size: 15px;
+	line-height: 1.6;
+	-webkit-font-smoothing: antialiased;
+}
+
+a {
+	text-decoration: none;
+	color: inherit;
+}
+
+a:focus {
+	outline: none;
+}
+
+a:focus-visible {
+	outline: 1px solid var(--teal);
+	outline-offset: 2px;
+}
+
+ul {
+	list-style: none;
+}
+
+img,
+svg {
+	display: block;
+	max-width: 100%;
+}
+
+
+/* =============================================================================
+   ANIMATIONS
+============================================================================= */
+
+@keyframes fade-up {
+	from {
+		opacity: 0;
+		transform: translateY(16px);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.animate-fade-up {
+	animation: fade-up 0.5s ease backwards;
+}
+
+.animate-delay-1 {
+	animation-delay: 0.2s;
+}
+
+.animate-delay-2 {
+	animation-delay: 0.3s;
+}
+
+.animate-delay-3 {
+	animation-delay: 0.4s;
+}
+
+.animate-delay-4 {
+	animation-delay: 0.5s;
+}
+
+
+/* =============================================================================
+   SCROLLBAR
+============================================================================= */
+
+::-webkit-scrollbar {
+	width: 6px;
+}
+
+::-webkit-scrollbar-track {
+	background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--fg-3);
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--fg-2);
+}

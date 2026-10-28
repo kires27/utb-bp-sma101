@@ -1,0 +1,42 @@
+name: tests
+
+on:
+  push:
+    paths: ["toolkit-stocks/**"]
+  pull_request:
+    paths: ["toolkit-stocks/**"]
+  schedule:
+    - cron: "30 8 * * *"
+  workflow_dispatch:
+
+jobs:
+  unit:
+    name: Unit + golden tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: pip install -r toolkit-stocks/requirements.txt
+      - name: Run non-live tests
+        working-directory: toolkit-stocks
+        run: python -m pytest tests/ -q # addopts already excludes live
+
+  live-smoke:
+    name: Live smoke (scheduled only)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: pip install -r toolkit-stocks/requirements.txt
+      - name: Run live smoke tests
+        working-directory: toolkit-stocks
+        run: python -m pytest tests/ -m live -q --override-ini="addopts="

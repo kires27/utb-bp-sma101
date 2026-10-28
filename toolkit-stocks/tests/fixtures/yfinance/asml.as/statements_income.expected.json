@@ -1,0 +1,57 @@
+[
+ {
+  "basic_average_shares": 388500000.0,
+  "fiscal_date": "2025-12-31",
+  "gross_profit": 17258000000.0,
+  "net_income": 9609400000.0,
+  "operating_income": 11301400000.0,
+  "otherunder_preferred_stock_dividend": null,
+  "period": "FY",
+  "stock_id": 1,
+  "total_revenue": 32667300000.0
+ },
+ {
+  "basic_average_shares": 393300000.0,
+  "fiscal_date": "2024-12-31",
+  "gross_profit": 14492000000.0,
+  "net_income": 7571600000.0,
+  "operating_income": 9022600000.0,
+  "otherunder_preferred_stock_dividend": null,
+  "period": "FY",
+  "stock_id": 1,
+  "total_revenue": 28262900000.0
+ },
+ {
+  "basic_average_shares": 393800000.0,
+  "fiscal_date": "2023-12-31",
+  "gross_profit": 14136100000.0,
+  "net_income": 7839000000.0,
+  "operating_income": 9042300000.0,
+  "otherunder_preferred_stock_dividend": null,
+  "period": "FY",
+  "stock_id": 1,
+  "total_revenue": 27558500000.0
+ },
+ {
+  "basic_average_shares": 397700000.0,
+  "fiscal_date": "2022-12-31",
+  "gross_profit": 10700100000.0,
+  "net_income": 5624200000.0,
+  "operating_income": 6500700000.0,
+  "otherunder_preferred_stock_dividend": null,
+  "period": "FY",
+  "stock_id": 1,
+  "total_revenue": 21173400000.0
+ },
+ {
+  "basic_average_shares": null,
+  "fiscal_date": "2021-12-31",
+  "gross_profit": null,
+  "net_income": null,
+  "operating_income": null,
+  "otherunder_preferred_stock_dividend": null,
+  "period": "FY",
+  "stock_id": 1,
+  "total_revenue": null
+ }
+]

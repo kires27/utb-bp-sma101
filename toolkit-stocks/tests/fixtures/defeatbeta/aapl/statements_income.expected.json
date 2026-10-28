@@ -1,0 +1,79 @@
+[
+ {
+  "basic_average_shares": 14948500000.0,
+  "fiscal_date": "2025-09-30",
+  "gross_profit": 195201000000.0,
+  "net_income": 112010000000.0,
+  "operating_income": 133050000000.0,
+  "otherunder_preferred_stock_dividend": null,
+  "period": "FY",
+  "stock_id": 1,
+  "total_revenue": 416161000000.0
+ },
+ {
+  "basic_average_shares": 15343783000.0,
+  "fiscal_date": "2024-09-30",
+  "gross_profit": 180683000000.0,
+  "net_income": 93736000000.0,
+  "operating_income": 123216000000.0,
+  "otherunder_preferred_stock_dividend": null,
+  "period": "FY",
+  "stock_id": 1,
+  "total_revenue": 391035000000.0
+ },
+ {
+  "basic_average_shares": 15744231000.0,
+  "fiscal_date": "2023-09-30",
+  "gross_profit": 169148000000.0,
+  "net_income": 96995000000.0,
+  "operating_income": 114301000000.0,
+  "otherunder_preferred_stock_dividend": null,
+  "period": "FY",
+  "stock_id": 1,
+  "total_revenue": 383285000000.0
+ },
+ {
+  "basic_average_shares": 16215963000.0,
+  "fiscal_date": "2022-09-30",
+  "gross_profit": 170782000000.0,
+  "net_income": 99803000000.0,
+  "operating_income": 119437000000.0,
+  "otherunder_preferred_stock_dividend": null,
+  "period": "FY",
+  "stock_id": 1,
+  "total_revenue": 394328000000.0
+ },
+ {
+  "basic_average_shares": 16701272000.0,
+  "fiscal_date": "2021-09-30",
+  "gross_profit": 152836000000.0,
+  "net_income": 94680000000.0,
+  "operating_income": 108949000000.0,
+  "otherunder_preferred_stock_dividend": null,
+  "period": "FY",
+  "stock_id": 1,
+  "total_revenue": 365817000000.0
+ },
+ {
+  "basic_average_shares": 17352119000.0,
+  "fiscal_date": "2020-09-30",
+  "gross_profit": 104956000000.0,
+  "net_income": 57411000000.0,
+  "operating_income": 66288000000.0,
+  "otherunder_preferred_stock_dividend": null,
+  "period": "FY",
+  "stock_id": 1,
+  "total_revenue": 274515000000.0
+ },
+ {
+  "basic_average_shares": 18471336000.0,
+  "fiscal_date": "2019-09-30",
+  "gross_profit": 98392000000.0,
+  "net_income": 55256000000.0,
+  "operating_income": 63930000000.0,
+  "otherunder_preferred_stock_dividend": null,
+  "period": "FY",
+  "stock_id": 1,
+  "total_revenue": 260174000000.0
+ }
+]

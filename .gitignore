@@ -1,0 +1,53 @@
+# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
+
+# Node dependencies
+node_modules
+
+# Logs
+logs
+*.log
+
+# Misc
+.DS_Store
+.fleet
+.idea
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+__pycache__
+
+.code-workspace
+.prettierrc
+.netlify
+.vscode
+
+.venv
+.env
+.code-workspace
+.dump
+dump
+.vscode
+log
+
+.~lock.*
+
+supabase-auth.json
+
+# custom
+web/tests/results
+concept
+.vscode
+src/data_cache/
+TODO.md
+log/
+.playwright-mcp
+run_summary.txt

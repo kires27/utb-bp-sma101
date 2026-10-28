@@ -1,0 +1,42 @@
+[
+ {
+  "capital_expenditure": -1631200000.0,
+  "fiscal_date": "2025-12-31",
+  "free_cash_flow": 11027300000.0,
+  "operating_cash_flow": 12658500000.0,
+  "period": "FY",
+  "stock_id": 1
+ },
+ {
+  "capital_expenditure": -2083100000.0,
+  "fiscal_date": "2024-12-31",
+  "free_cash_flow": 9083100000.0,
+  "operating_cash_flow": 11166200000.0,
+  "period": "FY",
+  "stock_id": 1
+ },
+ {
+  "capital_expenditure": -2196200000.0,
+  "fiscal_date": "2023-12-31",
+  "free_cash_flow": 3247200000.0,
+  "operating_cash_flow": 5443400000.0,
+  "period": "FY",
+  "stock_id": 1
+ },
+ {
+  "capital_expenditure": -1319300000.0,
+  "fiscal_date": "2022-12-31",
+  "free_cash_flow": 7167500000.0,
+  "operating_cash_flow": 8486800000.0,
+  "period": "FY",
+  "stock_id": 1
+ },
+ {
+  "capital_expenditure": null,
+  "fiscal_date": "2021-12-31",
+  "free_cash_flow": null,
+  "operating_cash_flow": null,
+  "period": "FY",
+  "stock_id": 1
+ }
+]

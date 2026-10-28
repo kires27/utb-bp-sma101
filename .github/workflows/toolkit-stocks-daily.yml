@@ -1,0 +1,51 @@
+name: Toolkit stocks daily
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./toolkit-stocks
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: BP/sma101
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: "pip"
+          cache-dependency-path: toolkit-stocks/requirements.txt
+      
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements.txt
+
+      - name: Run script
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python src/main.py --prod --fetch overview balance cash income prices metrics splits
+
+      - name: Upload run summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-summary-daily
+          path: toolkit-stocks/run_summary.txt
+          if-no-files-found: ignore
+
+      - name: Verify run
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -f run_summary.txt ]; then
+            python src/verify.py --prices-metrics --log run_summary.txt
+          else
+            python src/verify.py --prices-metrics
+          fi

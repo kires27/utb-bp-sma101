@@ -1,0 +1,112 @@
+[
+ {
+  "age": 44,
+  "born": 1981,
+  "exercised": 0,
+  "name": "Mr. Ben  Borders",
+  "pay": null,
+  "report_date": "2026-10-20",
+  "symbol": "AAPL",
+  "title": "Principal Accounting Officer",
+  "unexercised": 0
+ },
+ {
+  "age": 49,
+  "born": 1976,
+  "exercised": 0,
+  "name": "Mr. John  Ternus",
+  "pay": null,
+  "report_date": "2026-10-20",
+  "symbol": "AAPL",
+  "title": "CEO & Director",
+  "unexercised": 0
+ },
+ {
+  "age": 53,
+  "born": 1972,
+  "exercised": 0,
+  "name": "Mr. Kevan  Parekh",
+  "pay": 4034174,
+  "report_date": "2026-10-20",
+  "symbol": "AAPL",
+  "title": "Senior VP & CFO",
+  "unexercised": 0
+ },
+ {
+  "age": 58,
+  "born": 1967,
+  "exercised": 0,
+  "name": "Mr. Sabih  Khan",
+  "pay": 5021905,
+  "report_date": "2026-10-20",
+  "symbol": "AAPL",
+  "title": "Senior VP & Chief Operating Officer",
+  "unexercised": 0
+ },
+ {
+  "age": 64,
+  "born": 1961,
+  "exercised": 0,
+  "name": "Mr. Timothy D. Cook",
+  "pay": 16759518,
+  "report_date": "2026-10-20",
+  "symbol": "AAPL",
+  "title": "Executive Chairman of the Board",
+  "unexercised": 0
+ },
+ {
+  "age": 58,
+  "born": 1967,
+  "exercised": 0,
+  "name": "Ms. Deirdre  O'Brien",
+  "pay": 5037867,
+  "report_date": "2026-10-20",
+  "symbol": "AAPL",
+  "title": "Senior Vice President of Retail & People",
+  "unexercised": 0
+ },
+ {
+  "age": 55,
+  "born": 1970,
+  "exercised": 0,
+  "name": "Ms. Jennifer G. Newstead J.D.",
+  "pay": null,
+  "report_date": "2026-10-20",
+  "symbol": "AAPL",
+  "title": "Senior VP of Government Affairs & General Counsel",
+  "unexercised": 0
+ },
+ {
+  "age": 61,
+  "born": 1964,
+  "exercised": 0,
+  "name": "Ms. Katherine L. Adams",
+  "pay": 5022482,
+  "report_date": "2026-10-20",
+  "symbol": "AAPL",
+  "title": "Secretary",
+  "unexercised": 0
+ },
+ {
+  "age": null,
+  "born": null,
+  "exercised": 0,
+  "name": "Ms. Kristin Huguet Quayle",
+  "pay": null,
+  "report_date": "2026-10-20",
+  "symbol": "AAPL",
+  "title": "Vice President of Worldwide Communications",
+  "unexercised": 0
+ },
+ {
+  "age": null,
+  "born": null,
+  "exercised": 0,
+  "name": "Suhasini  Chandramouli",
+  "pay": null,
+  "report_date": "2026-10-20",
+  "symbol": "AAPL",
+  "title": "Director of Investor Relations",
+  "unexercised": 0
+ }
+]
