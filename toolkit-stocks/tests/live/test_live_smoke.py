@@ -43,7 +43,7 @@ def test_yfinance_history_invariants():
 	yfs = YFinanceSource(max_workers=1)
 	payload = yfs.history_payload(SYMBOL_US)
 	assert payload and payload["price_rows"]
-	_check_price_rows(build_price_rows(SYMBOL_US, 1, payload["price_rows"], payload["div_events"], payload["split_events"], None), "yfinance")
+	_check_price_rows(build_price_rows(SYMBOL_US, 1, payload["price_rows"], None), "yfinance")
 	assert build_dividend_rows(SYMBOL_US, 1, payload["div_events"], None) is not None
 	assert build_split_rows(SYMBOL_US, 1, payload["split_events"], None) is not None
 	for d in payload["div_events"]:
@@ -71,7 +71,9 @@ def test_defeatbeta_invariants():
 	_dates_ordered([r["date"] for r in prices], "defeatbeta")
 	divs = ds.dividends([SYMBOL_US]).get(SYMBOL_US, [])
 	splits = ds.splits([SYMBOL_US]).get(SYMBOL_US, [])
-	_check_price_rows(build_price_rows(SYMBOL_US, 1, prices, divs, splits, None), "defeatbeta")
+	_check_price_rows(build_price_rows(SYMBOL_US, 1, prices, None), "defeatbeta")
+	assert build_dividend_rows(SYMBOL_US, 1, divs, None) is not None
+	assert build_split_rows(SYMBOL_US, 1, splits, None) is not None
 	assert build_overview_row(SYMBOL_US, ds.profiles([SYMBOL_US])[SYMBOL_US], [], {}, None)
 
 
@@ -79,8 +81,8 @@ def test_parity_overlapping_dates():
 	'''Same symbol from both sources: overlapping recent closes within 1% tolerance.'''
 	yfs = YFinanceSource(max_workers=1)
 	ds = DefeatBetaSource()
-	yf_rows = build_price_rows(SYMBOL_US, 1, *(lambda p: (p["price_rows"], p["div_events"], p["split_events"], None))(yfs.history_payload(SYMBOL_US)))
-	db_rows = build_price_rows(SYMBOL_US, 1, ds.prices([SYMBOL_US])[SYMBOL_US], ds.dividends([SYMBOL_US])[SYMBOL_US], ds.splits([SYMBOL_US])[SYMBOL_US], None)
+	yf_rows = build_price_rows(SYMBOL_US, 1, yfs.history_payload(SYMBOL_US)["price_rows"], None)
+	db_rows = build_price_rows(SYMBOL_US, 1, ds.prices([SYMBOL_US])[SYMBOL_US], None)
 	yf_by_date = {r["date"]: r["close"] for r in yf_rows}
 	overlap = [r for r in db_rows if r["date"] in yf_by_date]
 	assert overlap, "no overlapping dates between sources"
@@ -99,4 +101,6 @@ def test_failover_drill_live():
 	rows = fo.prices([SYMBOL_US])[SYMBOL_US]
 	assert rows, "fallback produced no price rows"
 	assert price_rows_valid(rows)
-	_check_price_rows(build_price_rows(SYMBOL_US, 1, rows, fo.dividends([SYMBOL_US])[SYMBOL_US], fo.splits([SYMBOL_US])[SYMBOL_US], None), "failover-yfinance")
+	assert fo.dividends([SYMBOL_US])[SYMBOL_US] is not None
+	assert fo.splits([SYMBOL_US])[SYMBOL_US] is not None
+	_check_price_rows(build_price_rows(SYMBOL_US, 1, rows, None), "failover-yfinance")
