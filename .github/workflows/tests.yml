@@ -15,12 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
           cache: pip
-      - run: pip install -r toolkit-stocks/requirements.txt
+      - run: pip install -r toolkit-stocks/requirements.txt -r toolkit-stocks/requirements-dev.txt
       - name: Run non-live tests
         working-directory: toolkit-stocks
         run: python -m pytest tests/ -q # addopts already excludes live
@@ -31,12 +31,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
           cache: pip
-      - run: pip install -r toolkit-stocks/requirements.txt
+      - run: pip install -r toolkit-stocks/requirements.txt -r toolkit-stocks/requirements-dev.txt
       - name: Run live smoke tests
         working-directory: toolkit-stocks
         run: python -m pytest tests/ -m live -q --override-ini="addopts="
