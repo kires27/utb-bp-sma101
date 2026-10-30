@@ -1,8 +1,6 @@
 name: Toolkit stocks daily - financial analysis
 
 on:
-  schedule:
-    - cron: "0 9 * * *"
   workflow_dispatch:
 
 jobs:

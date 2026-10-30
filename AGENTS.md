@@ -154,11 +154,15 @@ Full test suite is done; test plan file deleted. Repo roadmap/failover: `PLAN.md
 
 ## CI
 
-Workflows in `.github/workflows/` (repo root), Python 3.14:
+Workflows in `.github/workflows/` (repo root), Python 3.14. All scheduling lives in **Supabase pg_cron** (jobs `gh-dispatch-*` call the GitHub `workflow_dispatch` API using the `github_pat` Vault secret) — workflows themselves have **no `on: schedule`** triggers. Times are UTC (pg_cron), offset from minute 0 to avoid GitHub scheduler congestion.
 
-- `toolkit-stocks-daily.yml` — pipeline `--prices --metrics` daily 08:00 UTC (`DATABASE_URL` secret).
-- `toolkit-stocks-daily-fa.yml` — `--fa` daily 09:00 UTC.
-- `tests.yml` — unit+golden on push/PR (path-filtered to `toolkit-stocks/**`), live smoke on daily schedule + `workflow_dispatch`.
+- `toolkit-stocks-hourly-prices.yml` — pipeline `--fetch metrics` every hour :37.
+- `toolkit-stocks-daily.yml` — pipeline `--prices --metrics` daily 08:23 UTC (`DATABASE_URL` secret).
+- `toolkit-stocks-daily-fa.yml` — `--fa` daily 09:41 UTC.
+- `tests.yml` — unit+golden on push/PR (path-filtered to `toolkit-stocks/**`), live smoke daily 08:53 UTC via dispatch + `workflow_dispatch`.
+- `cron-run-details-cleanup` (pg_cron, no GitHub side) — purges `cron.job_run_details` >7 days, 03:00 UTC.
+
+Monitor dispatches: `cron.job_run_details` (did the job fire) + `net._http_response` (204 = dispatched) in the Supabase DB; workflow logs remain in GitHub Actions.
 
 ## Entrypoint & Flow
 

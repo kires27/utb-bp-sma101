@@ -5,8 +5,6 @@ on:
     paths: ["toolkit-stocks/**"]
   pull_request:
     paths: ["toolkit-stocks/**"]
-  schedule:
-    - cron: "30 8 * * *"
   workflow_dispatch:
 
 jobs:
