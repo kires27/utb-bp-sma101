@@ -2,8 +2,8 @@ import re
 
 
 # DB statement fields and the statement line-item titles that feed them.
-# DefeatBeta uses snake_case item_names, yfinance uses Title Case row labels
-# (both derive from the same Yahoo taxonomy), so one alias map serves both.
+# yfinance uses Title Case row labels (both derive from the same Yahoo
+# taxonomy), so one alias map serves the normalize step.
 STATEMENT_FIELD_MAP: dict[str, list[str]] = {
 	"total_revenue": ["total_revenue"],
 	"gross_profit": ["gross_profit"],
@@ -61,20 +61,3 @@ def pick_statement_value(fields: dict, db_field: str):
 		if alias in fields:
 			return fields[alias]
 	return None
-
-
-def route_symbols(symbols: list[str], us_members: set[str]) -> tuple[list[str], list[str]]:
-	'''
-	Partition symbols into DefeatBeta (US dataset) and yfinance targets.
-	Membership in the DefeatBeta stock_profile dataset is the authoritative
-	test, including for symbols that are not yet in the database.
-	'''
-	us = [s for s in symbols if s in us_members]
-	intl = [s for s in symbols if s not in us_members]
-	return us, intl
-
-
-US_EXCHANGE_FALLBACK = {
-	"NYSE", "NASDAQ", "AMEX", "ASE", "NMS", "NGM", "PCX", "BATS", "NYSEArca",
-	"OTC", "PNK", "NYSE MKT", "OTC Markets", "OTCQB", "OTCBB",
-}

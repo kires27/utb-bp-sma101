@@ -7,38 +7,49 @@ warnings.filterwarnings("ignore", message="Timestamp.utcnow is deprecated.*")
 
 
 PHASES = ["overview", "balance", "cash", "income", "dividends", "prices", "splits", "metrics", "fa"]
+RUN_MODES = ["hourly", "daily", "backfill"]
+SYMBOL_MODES = ["db", "file", "screener"]
 
 parser = argparse.ArgumentParser(description="MICE script to insert/update data to database")
-mode_group = parser.add_mutually_exclusive_group(required=True)
-mode_group.add_argument("--dev", action="store_true", help="Dev run: manual symbol list, writes log file")
-mode_group.add_argument("--prod", action="store_true", help="Production run: stocks from DB, no log file")
-parser.add_argument("--force", action="store_true", help="Bypass freshness checks, fetch everything")
-parser.add_argument("--fetch", nargs="+", required=True, choices=PHASES + ["all"], help="Phases to run (one or more, or 'all')")
+parser.add_argument("--run", choices=RUN_MODES, required=True, help="Composition runner: hourly|daily|backfill")
+parser.add_argument("--symbols", choices=SYMBOL_MODES, default="db", help="Symbol discovery mode (default: db)")
+parser.add_argument("--force", action="store_true", help="Bypass freshness checks, re-pull everything (price history capped at 10y)")
 args = parser.parse_args()
 
-if "all" in args.fetch:
-	args.fetch = PHASES
+printf.open("log", create_log=False, console_print=True)
+load_dotenv()
 
-# Default all phases to False so orchestrator can test any phase attribute,
-# even when only a subset is selected via --fetch
-for phase in PHASES:
-	setattr(args, phase, False)
+from lib.supabase.sql_functions import get_symbols, get_stock_id_map
+from pipeline.runner import run_mode
+from lib.functions.stats import report
 
-for mode in args.fetch:
-	setattr(args, mode, True)
-
-if args.prod:
-	printf.open("log", create_log=False, console_print=True)
+if args.symbols == "file":
+	from data.symbols import manual_symbols as symbols
+elif args.symbols == "screener":
+	from pipeline.screener import discover
+	discovery = discover()
+	# Backfill queue: only symbols discovery just inserted. Insert-only,
+	# so next scheduled run picks up anything missed today.
+	symbols = discovery["new_symbols"]
 else:
-	printf.open("log", create_log=True, console_print=True)
-	load_dotenv()
+	symbols = get_symbols()
 
+stock_ids = get_stock_id_map(symbols)
+printf(f"-- Run mode {args.run}, {len(symbols)} symbols ({args.symbols}) --", lv.INFO)
 
-from pipeline import run
+# ctx phases gate on fetch-style flags; daily runs everything, backfill =
+# prices (full), statements (full), overview, fa.
+for phase in PHASES:
+	setattr(args, phase, args.run == "daily" or (args.run == "backfill" and phase != "metrics"))
+if args.run == "backfill":
+	args.full = True  # full-history fetch mode, read by prices/statements
 
 try:
-	run(args)
-except KeyboardInterrupt:
-	printf("Interrupted by user", lv.WARNING)
+	phases = run_mode(args.run, args, symbols, stock_ids, force=args.force)
+	report(phases, prod=True)
+finally:
+	from lib.supabase.init import get_connection
+	get_connection().close()
+	printf("Disconnected from the database", lv.INFO)
 	printf.close()
-	os._exit(130)
+os._exit(0)

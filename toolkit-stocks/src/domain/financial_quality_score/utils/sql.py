@@ -18,7 +18,7 @@ def get_stock_industry(stock_id: int) -> str | None:
 		if result is None:
 			raise ValueError(f"Stock id: ({stock_id}) isn't in database")
 
-		return result
+		return result[0]
 	except Exception as e:
 		printf(e, lv.WARNING)
 		return None
@@ -35,10 +35,10 @@ def get_stock_ids_within_industry(industry: str):
 		)
 		result = cursor.fetchall()
 
-		if result is None:
+		if not result:
 			raise ValueError(f"Stock ({industry}) isn't in database")
 
-		return result
+		return [row[0] for row in result]
 	except Exception as e:
 		printf(e, lv.WARNING)
 		return None

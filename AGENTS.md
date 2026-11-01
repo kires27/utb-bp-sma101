@@ -14,7 +14,7 @@ Each directory is independently runnable.
 | Directory | What | Coverage |
 |-----------|------|----------|
 | `web/` | Nuxt 4 app (main deliverable) | this file |
-| `toolkit-stocks/` | Python data pipeline (yahooquery → Supabase) | this file |
+| `toolkit-stocks/` | Python data pipeline (yfinance → Supabase) | this file |
 | `toolkit-congress/` | empty — placeholder |
 | `concept/` | design artifacts, prototypes, calculations — NOT code |
 
@@ -132,12 +132,11 @@ Tokens in `app/styles/app.css` CSS variables. Never hardcode colors.
 # Venv
 source .venv/bin/activate
 
-# Run all data pipelines
-python3 src/main.py --prod --fetch all
-
-# Single pipeline
-python3 src/main.py --prod --fetch fa            # financial analysis only
-python3 src/main.py --dev --fetch overview       # dev: manual symbol list + log file
+# Run modes (the only CLI surface)
+python3 src/main.py --run hourly --symbols db            # hourly: batched v7/quote, marketState-gated
+python3 src/main.py --run daily --symbols db             # daily: all phases incl. metrics
+python3 src/main.py --run backfill --symbols screener    # manual: screener discovery + full history
+python3 src/main.py --run daily --symbols db --force     # correction mode: re-pull everything
 
 # Tests
 python -m pytest tests/              # unit + golden (live auto-excluded via addopts)
@@ -147,7 +146,7 @@ python tests/capture_fixtures.py     # capture fixture payloads + expected rows 
 
 ## Known test status
 
-Full test suite is done; test plan file deleted. Repo roadmap/failover: `PLAN.md`.
+Full test suite is done; test plan file deleted. Repo roadmap: `PLAN-rewrite-toolkit.md` (4000-stock scale; M7 cutover done, soak + expansion in progress).
 
 - `test_intrinsic_value.py::test_calculate_intrinsic_value` — **xfail**: stale golden value (actual 163.43 vs expected 54.56). Verify which is correct; if algorithm changed intentionally, update expected value and un-xfail.
 
@@ -156,9 +155,9 @@ Full test suite is done; test plan file deleted. Repo roadmap/failover: `PLAN.md
 
 Workflows in `.github/workflows/` (repo root), Python 3.14. All scheduling lives in **Supabase pg_cron** (jobs `gh-dispatch-*` call the GitHub `workflow_dispatch` API using the `github_pat` Vault secret) — workflows themselves have **no `on: schedule`** triggers. Times are UTC (pg_cron), offset from minute 0 to avoid GitHub scheduler congestion.
 
-- `toolkit-stocks-hourly-prices.yml` — pipeline `--fetch metrics` every hour :37.
-- `toolkit-stocks-daily.yml` — pipeline `--prices --metrics` daily 08:23 UTC (`DATABASE_URL` secret).
-- `toolkit-stocks-daily-fa.yml` — `--fa` daily 09:41 UTC.
+- `toolkit-stocks-hourly-prices.yml` — `--run hourly --symbols db` every hour :37.
+- `toolkit-stocks-daily.yml` — `--run daily --symbols db` daily 08:23 UTC (`DATABASE_URL` secret) + verify.py.
+- `toolkit-stocks-manual-backfill.yml` — `--run backfill --symbols screener` (manual dispatch; verify.py `--fa`).
 - `tests.yml` — unit+golden on push/PR (path-filtered to `toolkit-stocks/**`), live smoke daily 08:53 UTC via dispatch + `workflow_dispatch`.
 - `cron-run-details-cleanup` (pg_cron, no GitHub side) — purges `cron.job_run_details` >7 days, 03:00 UTC.
 
@@ -166,21 +165,31 @@ Monitor dispatches: `cron.job_run_details` (did the job fire) + `net._http_respo
 
 ## Entrypoint & Flow
 
-`src/main.py` — parses `--<phase>` args, hands off to `pipeline/orchestrator.py:run()`. Orchestrator runs requested phases in fixed order: overview → statements (balance/cash/income) → market data (prices/splits/dividends, fetched once shared) → metrics → financial analysis. Sources: DefeatBeta bulk parquet (US) + yfinance (non-US), both behind `datasource/`. Writes to Supabase/PostgreSQL via psycopg2-binary.
+`src/main.py` — parses `--run <mode> --symbols <db|file|screener>` (mutually exclusive with nothing; `--force` global) and hands off to `pipeline/runner.py:run_mode()`, the composition table:
+
+- `hourly` — `pipeline/prices.py`: batched v7/quote (≤500/call via `datasource/quotes_batch.py`), marketState-gated writes (REGULAR/POST, or newer `regular_market_time` than stored).
+- `daily` — `RunContext` phases in fixed order: overview → statements (balance/cash/income) → market data (prices/splits/dividends, incremental via `history(start=<last_db_date>)`) → metrics → financial analysis.
+- `backfill` — same order as daily but `args.full=True` (full-history fetch) and metrics skipped (next hourly run covers).
+
+Symbol discovery: `db` (already in `stock`), `file` (`data/symbols.py` manual list), `screener` (YAML config → EquityQuery, paginated 250/page, insert-only into `stock`; returns only newly inserted symbols = backfill queue for this run).
+
+Single unified source: yfinance for all regions (DefeatBeta removed). Writes to Supabase/PostgreSQL via psycopg2-binary. Scheduling lives in Supabase pg_cron (see CI below).
 
 ## Source Layout
 
 ```
 src/
-  main.py                           entrypoint — argparse, loads .env, calls pipeline.run(args)
+  main.py                           entrypoint — argparse (--run/--symbols/--force), loads .env, calls runner.run_mode()
   constants/db_tables.py            table name constants
   datasource/                       data sources (fetch + normalize payloads)
+    quotes_batch.py                 QuotesBatchSource — batched v7/quote (≤500/call), GBp fix, marketState
+    yfinance_source.py              YfinanceSource — threaded executor (per-symbol), history/statements/info
     base.py                         shared alias maps (STATEMENT_FIELD_MAP), normalize_title
-    defeatbeta.py                   DefeatBetaSource — HF parquet via DuckDB, US bulk
-    yfinance_source.py              YfinanceSource — per-symbol, non-US; *_payload methods
   pipeline/                         orchestration
-    orchestrator.py                 run(args) — phase dispatch
-    context.py                      build_context — symbols, stock_ids, shared market data
+    runner.py                       run_mode() — composition table: hourly | daily | backfill
+    context.py                      RunContext — passive shared state (symbols, stock_ids, meta, yfs)
+    prices.py                       hourly batch flow (v7/quote, marketState gating)
+    screener.py                     discovery: screener.yml → EquityQuery → paginated screen(), insert-only
     overview.py, statements.py, market_data.py, metrics.py, financial_analysis.py
   lib/                              support code (no domain logic)
     transforms/                     normalized payload → DB row mappers (source-agnostic)
@@ -188,10 +197,10 @@ src/
       financial_analysis.py, quality_score.py
     functions/
       helper.py                     batch_tickers, evaluate_null_tolerance
-      data_types.py                 time/date converters
+      data_types.py                 time/date converters, period mapping
       db_types.py                   DB type helpers
     supabase/
-      sql_functions.py              shared DB helpers (get_statements_by_stock, insert_data_statement, etc.)
+      sql_functions.py              shared DB helpers (get_symbols, get_symbol_meta, get_latest_dates, RowFlusher)
       init.py                       psycopg2-binary connection singleton from DATABASE_URL
     module/
       printf.py                     custom logger
@@ -206,8 +215,9 @@ src/
     intrinsic_value/
       intrinsic_value.py            calculate_intrinsic_value — DCF (discounted FCFF + terminal value)
   data/
-    symbols.py                      symbol universe
-    etoro_stocks.py                 etoro stock list helpers
+    symbols.py                      manual symbol list (--symbols file)
+    screener.yml                    screener universe config (versioned; why the universe is what it is)
+    etoro_stocks.py                 etoro stock list helpers (unreferenced by pipeline, kept intentionally)
 ```
 
 ## Financial Quality Score
@@ -228,7 +238,7 @@ Flow: industry → get peer IDs → fetch their financial analysis at same fisca
 - `stock_financial_analysis` table key columns: `stock_id`, `fiscal_date`, `period` (enum: `FY`/`Q1`–`Q4`/`TTM`), `quality_score`, plus 19 metric columns.
 - All percent/ratio fields stored as raw values (0–1 or 0–100), not formatted strings.
 - Metric columns: `gross_margin`, `operating_margin`, `net_margin`, `return_on_equity`, `earnings_per_share`, `debt_to_equity`, `debt_growth`, `current_ratio`, `revenue_growth`, `gross_income_growth`, `net_income_growth`, `retained_earning_growth`, `revenues_per_share`, `capital_index`, `payback_period`, `assets_price`, `pe_ratio`, `pb_ratio`, `dividend_yield`.
-- `stock` table has `industry` + `sector` columns (populated by `--overview`).
+- `stock` table has `industry` + `sector` columns (populated by the overview phase).
 - `stock_metric` table stores real-time price/market-cap (updated per run).
 
 ## Conventions

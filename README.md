@@ -1,7 +1,7 @@
 # README
 
 [![daily pipeline](https://github.com/kires27/utb-fai/actions/workflows/toolkit-stocks-daily.yml/badge.svg)](https://github.com/kires27/utb-fai/actions/workflows/toolkit-stocks-daily.yml)
-[![daily FA](https://github.com/kires27/utb-fai/actions/workflows/toolkit-stocks-daily-fa.yml/badge.svg)](https://github.com/kires27/utb-fai/actions/workflows/toolkit-stocks-daily-fa.yml)
+[![manual backfill](https://github.com/kires27/utb-fai/actions/workflows/toolkit-stocks-manual-backfill.yml/badge.svg)](https://github.com/kires27/utb-fai/actions/workflows/toolkit-stocks-manual-backfill.yml)
 
 # Commands
 
@@ -56,41 +56,41 @@ Setup upstream (usually on first push): `git push -u origin prod`
 
 ## toolkit-stocks (stock data pipeline)
 
-Fetches financial data from two sources, transforms it, and uploads it to Supabase/PostgreSQL. Consumed by the web app.
+Fetches financial data from yfinance, transforms it, and uploads it to Supabase/PostgreSQL. Consumed by the web app. Built to scale to ~4000 stocks (see `PLAN-rewrite-toolkit.md`).
 
 ### How it works (data flow)
 
 ```
-symbols (src/data/symbols.py)
+symbols (--symbols db | file | screener)
+    │  db = already in `stock` · file = manual list · screener = auto-discovery
+    ▼
+1. FETCH ────── yfinance only, two modes
+    hourly:  batched v7/quote (≤500 symbols/call), marketState-gated
+    daily/backfill: per-symbol threaded history() + statements + profile
+                    (daily incremental from last stored date, backfill = full)
     │
     ▼
-1. ROUTING ──── which source serves which symbol?
-    US symbols     → DefeatBeta (bulk parquet dataset via DuckDB)
-    non-US symbols → yfinance (per-symbol HTTP, threaded)
-    │
-    ▼
-2. FETCH ────── each source returns normalized "payloads"
-    profiles, officers, statements (long format),
-    price history, dividends, splits, shares, live quotes
-    │
-    ▼
-3. TRANSFORM ─── payloads → DB rows (lib/transforms/)
+2. TRANSFORM ── payloads → DB rows (lib/transforms/)
     e.g. recompute dividend/split-adjusted close over
     full history, group statement line items per report date,
     map fields to the DB schema
     │
     ▼
-4. ENRICH ────── business logic (domain/)
+3. ENRICH ───── business logic (domain/)
     financial-analysis metrics (ROE, margins, growth…),
     peer-normalized quality score, DCF intrinsic value
     │
     ▼
-5. UPLOAD ────── psycopg2 → PostgreSQL/Supabase
-    upsert rows per table (stock, stock_prices, statements,
-    stock_financial_analysis, stock_metric …)
+4. UPLOAD ───── psycopg2 → PostgreSQL/Supabase
+    chunked bulk inserts (RowFlusher), per-table conflict strategy
+    (stock, stock_historical_price, stock_statement_*, stock_metric,
+    stock_financial_analysis …)
 ```
 
-Entry: `src/main.py --<phase>` → `pipeline/orchestrator.py:run()` runs requested phases in fixed order: **overview → statements (balance/cash/income) → market data (prices/splits/dividends, fetched once shared) → metrics → financial analysis**.
+Entry: `src/main.py --run <hourly|daily|backfill> --symbols <db|file|screener>` → `pipeline/runner.py:run_mode()` composition table:
+- **hourly** — batched quotes → prices (gated on marketState / newer regularMarketTime)
+- **daily** — overview → statements → market data → metrics → financial analysis
+- **backfill** — same order as daily, full-history fetch, metrics skipped
 
 ### Commands
 
@@ -100,17 +100,16 @@ source .venv/bin/activate
 pip install -r requirements.txt          # .env needs DATABASE_URL
 
 # run pipeline
-python3 src/main.py --overview --balance --cash --income --dividends --prices --splits --metrics --fa   # everything
-python3 src/main.py --fa                 # financial analysis only
+python3 src/main.py --run hourly --symbols db            # hourly prices
+python3 src/main.py --run daily --symbols db             # full daily refresh
+python3 src/main.py --run backfill --symbols screener    # discovery + full backfill
+python3 src/main.py --run daily --symbols db --force     # correction mode
 
 # tests
 python -m pytest tests/                  # unit + golden (live auto-excluded)
 python -m pytest tests/ -m live --override-ini="addopts="   # live smoke (real network)
 python tests/capture_fixtures.py         # capture fixture payloads + expected rows
 python tests/capture_fixtures.py --update   # recompute expected rows from stored fixtures
-
-# lint
-flake8 src/
 ```
 
 ### Test layout
@@ -120,7 +119,6 @@ flake8 src/
 | `tests/unit/` | pure-function tests, no network |
 | `tests/golden/` | frozen API payloads → mappers → expected DB rows |
 | `tests/live/` | live smoke, invariants only (network) |
-| `tests/contract/` | source-failover contract |
 | `tests/fixtures/` | frozen payloads + expected rows |
 
 Known: `test_intrinsic_value.py` xfails on a stale golden value (163.43 vs 54.56) — see AGENTS.md.
@@ -130,11 +128,12 @@ Known: `test_intrinsic_value.py` xfails on a stale golden value (163.43 vs 54.56
 
 # CI
 
-GitHub Actions in `.github/workflows/` (Python 3.14):
+GitHub Actions in `.github/workflows/` (Python 3.14). Workflows are `workflow_dispatch`-only — all scheduling lives in **Supabase pg_cron** (jobs `gh-dispatch-*` call the GitHub API using the `github_pat` Vault secret):
 
-| Workflow | Trigger | What |
+| Workflow | Schedule (pg_cron, UTC) | Command |
 |---|---|---|
-| `toolkit-stocks-daily.yml` | daily 08:00 UTC | pipeline `--prices --metrics` (needs `DATABASE_URL` secret) |
-| `toolkit-stocks-daily-fa.yml` | daily 09:00 UTC | pipeline `--fa` |
-| `tests.yml` | push/PR (`toolkit-stocks/**`) | unit + golden tests |
-| `tests.yml` (live-smoke job) | daily 08:00 UTC + manual dispatch | live smoke tests |
+| `toolkit-stocks-hourly-prices.yml` | hourly :37 | `--run hourly --symbols db` |
+| `toolkit-stocks-daily.yml` | daily 08:23 | `--run daily --symbols db` + verify.py |
+| `toolkit-stocks-manual-backfill.yml` | manual only | `--run backfill --symbols screener` |
+| `tests.yml` (unit job) | push/PR (`toolkit-stocks/**`) | unit + golden tests |
+| `tests.yml` (live-smoke job) | daily 08:53 + manual dispatch | live smoke tests |

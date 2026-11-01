@@ -10,9 +10,9 @@
 - Realtime prices IMPLEMENTED (2026-10-25, `PLAN-realtime-prices.md`): staleness 3 min on `regular_market_time`, yahoo-finance2 v4 + fallback, 60s client heartbeat + Realtime. Open: 2 manual RLS on kire; `SUPABASE_SECRET_KEY` in Netlify.
 - Price history capped to 10y (2026-10-25): fetch-side cutoff + pg_cron weekly purge. Pre-10y div/split events kept (feed derivation).
 - Monitoring DONE (2026-10-24): per-phase stats, `verify.py` freshness/fail checks → email.
-- DefeatBeta (US) + yfinance (non-US); yahooquery deleted. Failover: `FailoverSource(primary, fallback, validate)`, prices all-or-nothing per full history. DefeatBeta license ODC-BY: thesis OK, not commercial.
+- DefeatBeta (US) + yfinance (non-US); yahooquery deleted. Failover: `FailoverSource(primary, fallback, validate)`, prices all-or-nothing per full history. DefeatBeta license ODC-BY: thesis OK, not commercial. **REMOVED 2026-11-01 (PLAN-rewrite-toolkit.md M4): DefeatBeta + FailoverSource + partition_symbols + exchange heuristics deleted; yfinance is now the single source for all regions. DefeatBeta license no longer relevant.**
 - Intrinsic value: Excel sheet canonical: NFCF = mean of 3 newest FCFs; 5y AGR; terminal = peer/industry P/FCF; MoS ×0.75.
-- Deps: yfinance 1.7.0, curl_cffi 0.16.3, pandas 3.1, numpy 2.5.4; don't bump duckdb (defeatbeta-api pins it).
+- Deps: yfinance 1.7.0, curl_cffi 0.16.3, pandas 3.1, numpy 2.5.4, PyYAML 6.0.3 (screener config); duckdb no longer in requirements (defeatbeta-api removed with DefeatBeta).
 
 # Gotchas & Lessons
 - Kire (`kwpzvlymmaczaixtjdbu`) = live SMA DB (web target); halite = older copy, do not write. Web writes need `SUPABASE_SECRET_KEY` → `useSupabaseAdmin`.
@@ -25,7 +25,9 @@
 - CI workflows at repo root `.github/workflows/`.
 
 # Open threads
-- toolkit-stocks: session changes UNCOMMITTED (10y cap, --force, adj_close removal, yfinance 1.7.0, yahooquery removal, deps).
+- toolkit-stocks: rewrite-toolkit M1-M7 changes UNCOMMITTED (batched quotes, DefeatBeta/failover removal, threaded executor, backfill+screener, CLI cutover, workflows, docs). Commit after soak starts green.
+- M7 soak (24-48h at ~200 stocks) in progress, then expansion to 4000 in screener batches (~500/run, soak between batches).
 - Quality score currency bug (`PLAN-quality-score-currency.md`): drop EPS/revenues-per-share from GROUPS, redistribute weights, re-run `--fa`.
+- `get_stock_industry()` tuple bug FIXED 2026-11-01 (`sql.py`): now returns `result[0]` string; `get_stock_ids_within_industry()` returns flat id list (not 1-tuples). Quality score peers work.
 - Full-universe run (`PLAN-full-universe-run.md`): ~4,621 symbols, record timing.
 - Regenerate `web/app/types/database.types.ts` (still declares adj_close).

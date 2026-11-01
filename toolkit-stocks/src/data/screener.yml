@@ -1,0 +1,43 @@
+# Screener universe config — 1:1 mapping onto the Yahoo screener vocabulary.
+# Operators (closed set): eq, is-in, btwn, gt, lt, gte, lte, and, or.
+#
+# Each entry under `universe` is one query = an implicit AND of conditions.
+# Condition forms:
+#   field: value            -> eq          (scalar)
+#   field: [v1, v2]         -> is-in       (list)
+#   field: {gt: v}          -> explicit operator (gt/lt/gte/lte/btwn)
+#   {and: [...]} / {or: [...]}  -> composite
+#
+# Validation is strict: unknown fields, unknown operators and invalid eq/is-in
+# values (region/exchange/sector/industry/peer_group) raise at startup — the
+# run never starts with a half-understood universe.
+#
+# Discovery is insert-only: new screener symbols go into `stock`, the backfill
+# composition fetches their full history on this same run. Existing symbols in
+# `stock` are never touched here.
+
+universe:
+  - name: us-core
+    # US main exchanges, priced, with real volume: the core US universe.
+    conditions:
+      - region: us
+      - exchange: [NMS, NYQ]        # Nasdaq + NYSE
+      - eodprice: {btwn: [2, 10000]}
+      - avgdailyvol3m: {gt: 100000}
+
+  - name: us-europe
+    # European large exchanges for non-US coverage.
+    conditions:
+      - or:
+          - and:
+              - region: gb
+              - exchange: [LSE]
+          - and:
+              - region: fr
+              - exchange: [PAR]
+          - and:
+              - region: de
+              - exchange: [FRA]
+          - and:
+              - region: ch
+              - exchange: [EBS]

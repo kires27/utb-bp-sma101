@@ -1,7 +1,9 @@
 import traceback
 from psycopg2 import errors as p_errors
 from psycopg2 import sql
-from datetime import date as dtdate
+from datetime import date as dtdate, datetime as dt_datetime
+
+from psycopg2.extras import execute_values
 
 from lib.supabase.sql_queries import query_insert, query_upsert
 from lib.functions.helper import evaluate_null_tolerance
@@ -64,10 +66,14 @@ def get_symbols() -> list:
 	conn = get_connection()
 	cursor = conn.cursor()
 
-	cursor.execute(
-		sql.SQL("SELECT symbol FROM {}").format(sql.Identifier(dbt.stock))
-	)
-	results = cursor.fetchall()
+	try:
+		cursor.execute(
+			sql.SQL("SELECT symbol FROM {}").format(sql.Identifier(dbt.stock))
+		)
+		results = cursor.fetchall()
+	except Exception as e:
+		printf(f"get_symbols failed: {e}", lv.WARNING)
+		return []
 
 	if not results:
 		printf("No data fetched from database", lv.WARNING)
@@ -113,6 +119,27 @@ def get_latest_dates(table: str, stock_ids: list[int]) -> dict[int, dtdate]:
 		return {row[0]: to_date(row[1]) for row in cursor.fetchall()}
 	except Exception as e:
 		printf(f"get_latest_dates failed: {e}", lv.WARNING)
+		return {}
+
+
+def get_latest_market_times(stock_ids: list[int]) -> dict[int, dt_datetime]:
+	'''stock_id -> newest stored regular_market_time (tz-aware) from stock_metric.
+	Hourly gating: fetch/write only when the market time is newer than stored.'''
+	conn = get_connection()
+	cursor = conn.cursor()
+
+	try:
+		cursor.execute(
+			sql.SQL("""
+				SELECT stock_id, regular_market_time
+				FROM {}
+				WHERE stock_id = ANY(%s) AND regular_market_time IS NOT NULL
+			""").format(sql.Identifier(dbt.metric)),
+			(stock_ids,)
+		)
+		return {row[0]: row[1] for row in cursor.fetchall()}
+	except Exception as e:
+		printf(f"get_latest_market_times failed: {e}", lv.WARNING)
 		return {}
 
 
@@ -298,3 +325,98 @@ def insert_data_statement(
 		return 0
 	finally:
 		cursor.close()
+
+
+def insert_rows_bulk(
+	table: str,
+	rows: list[dict],
+	conflict_keys: list[str] | None = None,
+	null_tolerance: float = 1,
+) -> int:
+	'''
+	Chunked bulk insert via execute_values. conflict_keys set -> upsert
+	(ON CONFLICT ... DO UPDATE, every non-key column updated from EXCLUDED);
+	without -> plain insert (ON CONFLICT DO NOTHING). Rows whose columns are
+	over the null tolerance are dropped before flush.
+	:return - rows flushed (dropped rows excluded).
+	'''
+	conn = get_connection()
+	cursor = conn.cursor()
+
+	try:
+		if not rows:
+			return 0
+
+		# column set from first row; evaluate null tolerance row-wise
+		flush: list[tuple] = []
+		dropped = 0
+		for row in rows:
+			passed_nulls, cleaned = evaluate_null_tolerance(row, null_tolerance)
+			if passed_nulls:
+				flush.append(tuple(cleaned.get(col) for col in rows[0].keys()))
+			else:
+				dropped += 1
+		if dropped:
+			printf(f"{table}: dropped {dropped} rows over null tolerance", lv.INFO)
+		if not flush:
+			return 0
+
+		cols = list(rows[0].keys())
+		col_sql = ", ".join(sql.Identifier(c).as_string(conn) for c in cols)
+		placeholders = "(" + ", ".join(["%s"] * len(cols)) + ")"
+		if conflict_keys:
+			key_sql = ", ".join(sql.Identifier(c).as_string(conn) for c in conflict_keys)
+			update_sql = ", ".join(f"{c} = EXCLUDED.{c}" for c in cols if c not in conflict_keys)
+			statement = (
+				f"INSERT INTO {table} ({col_sql}) VALUES %s "
+				f"ON CONFLICT ({key_sql}) DO UPDATE SET {update_sql}"
+			)
+		else:
+			statement = f"INSERT INTO {table} ({col_sql}) VALUES %s ON CONFLICT DO NOTHING"
+
+		execute_values(cursor, statement, flush, page_size=len(flush))
+		conn.commit()
+		return len(flush)
+	except Exception as e:
+		tb = traceback.extract_tb(e.__traceback__)[-1]
+		printf(f"{e} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
+		conn.rollback()
+		return 0
+	finally:
+		cursor.close()
+
+
+class RowFlusher:
+	'''
+	Streaming row buffer for a phase: rows accumulate across symbols and are
+	flushed to the DB in chunks of flush_size via insert_rows_bulk. Keeps the
+	universe out of memory and replaces per-row cursor.execute inserts.
+	finish() drains the remainder and returns total rows flushed.
+	'''
+
+	def __init__(self, table: str, flush_size: int = 1000, conflict_keys: list[str] | None = None, null_tolerance: float = 1):
+		self.table = table
+		self.flush_size = flush_size
+		self.conflict_keys = conflict_keys
+		self.null_tolerance = null_tolerance
+		self.buffer: list[dict] = []
+		self.written = 0
+
+	def add(self, rows: list[dict]):
+		if rows:
+			self.buffer.extend(rows)
+			if len(self.buffer) >= self.flush_size:
+				self._flush()
+
+	def _flush(self):
+		rows, self.buffer = self.buffer, []
+		self.written += insert_rows_bulk(
+			self.table, rows,
+			conflict_keys=self.conflict_keys,
+			null_tolerance=self.null_tolerance,
+		)
+
+	def finish(self) -> int:
+		if self.buffer:
+			self._flush()
+		return self.written

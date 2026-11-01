@@ -22,7 +22,7 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements.txt
 
-      - name: Run metrics pipeline
+      - name: Run hourly prices
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python src/main.py --prod --fetch metrics
+        run: python src/main.py --run hourly --symbols db

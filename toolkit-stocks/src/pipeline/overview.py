@@ -7,42 +7,15 @@ from .context import refresh_ids
 
 
 def run_overview(ctx):
-	ds = ctx.ds
 	yfs = ctx.yfs
-	stats = new_phase("overview", len(ctx.us_symbols) + len(ctx.intl_symbols))
+	stats = new_phase("overview", len(ctx.symbols))
 
-	# DefeatBeta profiles (US) + officers for key executives
-	profiles = ds.profiles(ctx.us_symbols)
-	officers = ds.officers(ctx.us_symbols)
-
-	# Identity fallback (name/exchange/currency) for symbols with no DB meta yet
-	need_yf_identity = [s for s in ctx.us_symbols if not ctx.symbol_meta.get(s, {}).get("name")]
-	yf_infos = yfs.map_symbols(yfs.info, need_yf_identity, "overview identity") if need_yf_identity else {}
-
-	rows = []
-	for symbol in ctx.us_symbols:
-		profile = profiles.get(symbol)
-		if not profile:
-			printf(f"{symbol}: no DefeatBeta profile", lv.WARNING)
-			count_symbol(stats, False, symbol)
-			continue
-		row = build_overview_row(
-			symbol, profile, officers.get(symbol, []),
-			ctx.symbol_meta.get(symbol, {}) or {},
-			yf_infos.get(symbol),
-		)
-		if not row.get("name"):
-			printf(f"{symbol}: no name resolved, skipping overview row", lv.WARNING)
-			count_symbol(stats, False, symbol)
-			continue
-		rows.append(row)
-
-	# Non-US via yfinance info()
 	def yf_profile(sym):
 		return yfs.profile(sym)
 
-	intl_infos = yfs.map_symbols(yf_profile, ctx.intl_symbols, "overview") if ctx.intl_symbols else {}
-	for symbol, info in intl_infos.items():
+	infos = yfs.map_symbols(yf_profile, ctx.symbols, "overview")
+	rows = []
+	for symbol, info in infos.items():
 		row = build_overview_row(symbol, info, None, ctx.symbol_meta.get(symbol, {}) or {}, info)
 		if not row.get("name"):
 			printf(f"{symbol}: no name resolved, skipping overview row", lv.WARNING)

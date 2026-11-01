@@ -1,4 +1,4 @@
-name: Toolkit stocks daily - financial analysis
+name: Toolkit stocks manual backfill
 
 on:
   workflow_dispatch:
@@ -18,20 +18,20 @@ jobs:
           python-version: "3.14"
           cache: "pip"
           cache-dependency-path: toolkit-stocks/requirements.txt
-      
+
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements.txt
 
-      - name: Run script
+      - name: Run backfill
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python src/main.py --prod --fetch fa
+        run: python src/main.py --run backfill --symbols screener
 
       - name: Upload run summary
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: run-summary-fa
+          name: run-summary-backfill
           path: toolkit-stocks/run_summary.txt
           if-no-files-found: ignore
 

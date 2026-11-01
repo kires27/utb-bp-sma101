@@ -3,6 +3,7 @@ from datetime import date as dtdate
 
 # Max age of historical prices (10 years, incl. leap days).
 PRICE_HISTORY_DAYS = 3652
+PRICE_HISTORY_PERIOD = "10y"
 
 
 def price_history_cutoff() -> dtdate:

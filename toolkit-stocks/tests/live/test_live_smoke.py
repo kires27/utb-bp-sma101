@@ -12,7 +12,7 @@ import math
 import pytest
 
 from datasource.yfinance_source import YFinanceSource
-from datasource.defeatbeta import DefeatBetaSource
+from datasource.quotes_batch import QuotesBatchSource
 from lib.transforms import (
 	build_price_rows, build_dividend_rows, build_split_rows,
 	build_overview_row, build_statement_rows,
@@ -64,43 +64,25 @@ def test_yfinance_statements_and_info_invariants():
 	assert rows and all(r["fiscal_date"] for r in rows)
 
 
-def test_defeatbeta_invariants():
-	ds = DefeatBetaSource()
-	prices = ds.prices([SYMBOL_US]).get(SYMBOL_US, [])
-	assert prices, "DefeatBeta prices empty"
-	_dates_ordered([r["date"] for r in prices], "defeatbeta")
-	divs = ds.dividends([SYMBOL_US]).get(SYMBOL_US, [])
-	splits = ds.splits([SYMBOL_US]).get(SYMBOL_US, [])
-	_check_price_rows(build_price_rows(SYMBOL_US, 1, prices, None), "defeatbeta")
-	assert build_dividend_rows(SYMBOL_US, 1, divs, None) is not None
-	assert build_split_rows(SYMBOL_US, 1, splits, None) is not None
-	assert build_overview_row(SYMBOL_US, ds.profiles([SYMBOL_US])[SYMBOL_US], [], {}, None)
+def test_quotes_batch_invariants():
+	'''Batched v7/quote: 2 symbols, 1 call, normalized fields present.'''
+	src = QuotesBatchSource()
+	quotes = src.fetch([SYMBOL_US, SYMBOL_INTL])
+	assert len(quotes) == 2, f"quotes_batch returned {len(quotes)} symbols"
+	for sym, q in quotes.items():
+		assert q["stock_price"] is not None, f"{sym}: no price"
+		assert q["market_state"] in ("REGULAR", "PRE", "POST", "POSTPOST", "CLOSED", "PREPRE"), f"{sym}: bad market_state {q['market_state']}"
+		assert q["regular_market_time"] is not None, f"{sym}: no regular_market_time"
 
 
-def test_parity_overlapping_dates():
-	'''Same symbol from both sources: overlapping recent closes within 1% tolerance.'''
-	yfs = YFinanceSource(max_workers=1)
-	ds = DefeatBetaSource()
-	yf_rows = build_price_rows(SYMBOL_US, 1, yfs.history_payload(SYMBOL_US)["price_rows"], None)
-	db_rows = build_price_rows(SYMBOL_US, 1, ds.prices([SYMBOL_US])[SYMBOL_US], None)
-	yf_by_date = {r["date"]: r["close"] for r in yf_rows}
-	overlap = [r for r in db_rows if r["date"] in yf_by_date]
-	assert overlap, "no overlapping dates between sources"
-	worst = max(abs(r["close"] - yf_by_date[r["date"]]) / yf_by_date[r["date"]] for r in overlap)
-	assert worst < 0.01, f"sources disagree by {worst:.2%}"
+def test_quotes_batch_gbp_scaling():
+	'''GBp-quoted symbols: price scaled to base currency (marketCap untouched).'''
+	from data.symbols import manual_symbols
 
-
-def test_failover_drill_live():
-	'''Real FailoverSource: primary (DefeatBeta) simulated outage -> yfinance fallback serves full history.'''
-	from datasource.failover import FailoverSource, price_rows_valid
-
-	yfs = YFinanceSource(max_workers=1)
-	failing = DefeatBetaSource.__new__(DefeatBetaSource)
-	failing.prices = lambda symbols: (_ for _ in ()).throw(ConnectionError("simulated outage"))
-	fo = FailoverSource(failing, yfs)
-	rows = fo.prices([SYMBOL_US])[SYMBOL_US]
-	assert rows, "fallback produced no price rows"
-	assert price_rows_valid(rows)
-	assert fo.dividends([SYMBOL_US])[SYMBOL_US] is not None
-	assert fo.splits([SYMBOL_US])[SYMBOL_US] is not None
-	_check_price_rows(build_price_rows(SYMBOL_US, 1, rows, None), "failover-yfinance")
+	gbp_syms = [s for s in manual_symbols if s.endswith(".L")][:3]
+	assert gbp_syms, "no GBP symbols in dev list"
+	src = QuotesBatchSource()
+	quotes = src.fetch(gbp_syms)
+	for sym, q in quotes.items():
+		assert q["currency"] in ("GBp", "GBX")
+		assert q["stock_price"] < q["market_cap"], f"{sym}: GBp price not scaled (price={q['stock_price']}, mcap={q['market_cap']})"
