@@ -176,3 +176,56 @@ only — no valuation/derivative endpoints; phases stream, never buffer whole
 universe in memory; a failed phase must not block the next phase's start, but
 must exit nonzero.
 
+## M0 Audit — module → table → workflow mapping (2026-11-01)
+
+### Entry / orchestration
+| Module | Role | Tables touched | Workflow |
+|---|---|---|---|
+| `src/main.py` | argparse: `--dev`/`--prod`, `--force`, `--fetch <phases>` (overview/balance/cash/income/dividends/prices/splits/metrics/fa) | none | all |
+| `src/pipeline/orchestrator.py` | fixed phase order; fetches DefeatBeta bulk once when any of prices/splits/dividends/metrics/fa requested (line 36-38) | all (via phases) | all |
+| `src/pipeline/context.py` | `RunContext` (symbols, stock_ids, symbol_meta, ds=FailoverSource(DefeatBeta, yf), yfs, market_data_cache); `partition_symbols` via `us_members` probe, exchange-heuristic fallback | none | all |
+| `src/data/symbols.py` | `manual_symbols` (~200) for `--dev` | none | dev only |
+| `src/data/etoro_stocks.py` | 27k-line etoro list, currently unreferenced by pipeline | none | none |
+
+### Phases
+| Phase | Module | Fetch path | Tables | Conflict strategy |
+|---|---|---|---|---|
+| overview | `pipeline/overview.py` | US: DefeatBeta profiles+officers, yf identity fallback for missing names; intl: yf info() per symbol | `stock` | upsert by symbol (update_condition) |
+| balance/cash/income | `pipeline/statements.py` | US: DefeatBeta statements bulk; intl: yf statements_payload per symbol. Freshness: 380-day window + `updated_at` stamp check | `stock_balance_sheet`, `stock_cash_flow`, `stock_income_statement` | plain insert (no conflict keys) |
+| prices/splits/dividends | `pipeline/market_data.py` | US: DefeatBeta bulk (prices/shares/divs/splits); intl: yf history_payload per symbol, incremental via `get_latest_dates` + `map_latest_yahoo_historical` period mapping | `stock_historical_price`, `stock_split`, `stock_dividend` | prices/divs: conflict_keys ["stock_id","date"] only when `--force`; **splits also get conflict_keys on force (see audit finding 1)** |
+| metrics | `pipeline/metrics.py` | US: `build_us_quote` from cached DefeatBeta bulk (EOD close, shares, TTM divs); intl: yf quote() per symbol | `stock_metric` | upsert by stock_id |
+| fa | `pipeline/financial_analysis.py` | same quote paths as metrics; statements read back from DB | `stock_financial_analysis` | upsert by (stock_id, fiscal_date, period); then quality_score second upsert |
+
+### Data sources
+| Module | Role |
+|---|---|
+| `datasource/defeatbeta.py` | HF parquet via DuckDB, 500/chunk: us_members, profiles, officers, statements (long format), prices, dividends, splits ("a:b" strings), shares_outstanding |
+| `datasource/yfinance_source.py` | per-symbol threaded (8 workers, 4-retry backoff): info, quote, history (auto_adjust=False), statements (annual/quarterly), history_payload |
+| `datasource/failover.py` | per-symbol failover; prices/divs/splits all-or-nothing per full history; dividends invert roles (yfinance primary for precision) |
+| `datasource/base.py` | STATEMENT_FIELD_MAP aliases, normalize_title, route_symbols, US_EXCHANGE_FALLBACK |
+
+### Transforms (source-agnostic mappers)
+`lib/transforms/`: prices (`build_price_rows`, incremental by latest_date), events (dividend/split rows, splits sorted oldest-first), metrics (`build_metric_row`), overview (`build_overview_row`, sector/industry intentionally swapped), statements (`build_statement_rows`, `group_statement_records`), financial_analysis (`build_financial_analysis` via `fa_calculations`, 19 metrics), quality_score.
+
+### DB layer
+`lib/supabase/sql_functions.py`: `insert_data_statement` is **row-by-row** (one cursor.execute per row, one commit at the end). `get_latest_dates`/`get_latest_fiscal_dates` batched. Connection singleton `lib/supabase/init.py`.
+
+### Workflows (all `workflow_dispatch`; scheduling via Supabase pg_cron)
+| Workflow | Command |
+|---|---|
+| `toolkit-stocks-hourly-prices.yml` | `--prod --fetch metrics` |
+| `toolkit-stocks-daily.yml` | `--prod --fetch overview balance cash income prices metrics splits` + verify.py |
+| `toolkit-stocks-daily-fa.yml` | `--prod --fetch fa` + verify.py |
+| `tests.yml` | pytest unit+golden on PR; live smoke daily |
+
+### Tests
+`tests/unit/` (11 files: transforms, fa_calcs, quality score, stats, gating, data types, intrinsic value xfail), `tests/contract/test_failover_contract.py`, `tests/golden/`, `tests/live/`.
+
+### Audit findings (carry into rewrite)
+1. **Split force bug**: `market_data.py` passes `conflict_keys` to `stock_split` when `--force`. An UPDATE would not re-fire the AFTER INSERT rebase trigger, so no double-rebase, but it violates the "never update stock_split from Python" rule. Rewrite: splits never receive conflict keys, ever.
+2. **Overview has no freshness gate** — refetches profiles+officers for the entire US universe every run it's enabled. Fine at 200, wasteful at 4000. Daily flow should gate by meta presence / staleness like statements do.
+3. **Hourly metrics run pays the full DefeatBeta bulk fetch** (prices+shares+dividends) because `build_us_quote` needs the market_data cache. Under the rewrite the hourly flow becomes the batched v7/quote call only.
+4. **`insert_data_statement` row-by-row** is the per-row commit bottleneck; the rewrite's chunked `execute_values` replaces it. Note: it also loses `regular_market_time` on US metric rows (key omitted → old value preserved) — intentional.
+5. **etoro_stocks.py is dead weight** for the pipeline (27k lines, unused). Candidate for deletion in M7 or leaving untouched (out of scope unless user says otherwise).
+6. **yf statements `touch_statement_rows` after fetch** also stamps rows whose fetch returned nothing — acceptable (fetch happened), keep semantics.
+
