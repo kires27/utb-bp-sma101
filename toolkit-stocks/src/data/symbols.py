@@ -46,7 +46,7 @@ manual_symbols = [
 	'5401.T', '600019.SS', '005490.KS',
 
 	# --- Real Estate ---
-	'PLD', 'AMT', 'O', 'SPG', 'CCI', 'WELL', 'EQIX', 'DLR', 'PSA', 'AVB',
-	'EQR', '8801.T', '8802.T', 'C38U.SI', '0016.HK', 'GMG.AX', 'SGRO.L',
+	'PLD', 'AMT', 'O', 'SPG', 'CCI', 'WELL', 'EQIX', 'DLR', 'PSA',
+	'8801.T', '8802.T', 'C38U.SI', '0016.HK', 'GMG.AX', 'SGRO.L',
 	'BLND.L', 'LAND.L', 'VNA.DE',
 ]

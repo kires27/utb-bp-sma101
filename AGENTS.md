@@ -157,9 +157,11 @@ Workflows in `.github/workflows/` (repo root), Python 3.14. All scheduling lives
 
 - `toolkit-stocks-hourly-prices.yml` — `--run hourly --symbols db` every hour :37.
 - `toolkit-stocks-daily.yml` — `--run daily --symbols db` daily 08:23 UTC (`DATABASE_URL` secret) + verify.py.
+- `toolkit-stocks-calendar.yml` — `--run calendar` daily 06:47 UTC (earnings + economic event sweep → `stock_economic_calendar`).
 - `toolkit-stocks-manual-backfill.yml` — `--run backfill --symbols screener` (manual dispatch; verify.py `--fa`).
 - `tests.yml` — unit+golden on push/PR (path-filtered to `toolkit-stocks/**`), live smoke daily 08:53 UTC via dispatch + `workflow_dispatch`.
 - `cron-run-details-cleanup` (pg_cron, no GitHub side) — purges `cron.job_run_details` >7 days, 03:00 UTC.
+- `purge-old-calendar-events` (pg_cron, no GitHub side) — purges `stock_economic_calendar` rows with `event_datetime` older than 6 months, 03:10 UTC.
 
 Monitor dispatches: `cron.job_run_details` (did the job fire) + `net._http_response` (204 = dispatched) in the Supabase DB; workflow logs remain in GitHub Actions.
 

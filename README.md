@@ -68,6 +68,8 @@ symbols (--symbols db | file | screener)
     hourly:  batched v7/quote (≤500 symbols/call), marketState-gated
     daily/backfill: per-symbol threaded history() + statements + profile
                     (daily incremental from last stored date, backfill = full)
+    calendar: paginated POST sweep of Yahoo's v1/finance/visualization
+              endpoint (earnings by region + global economic events)
     │
     ▼
 2. TRANSFORM ── payloads → DB rows (lib/transforms/)
@@ -87,10 +89,11 @@ symbols (--symbols db | file | screener)
     stock_financial_analysis …)
 ```
 
-Entry: `src/main.py --run <hourly|daily|backfill> --symbols <db|file|screener>` → `pipeline/runner.py:run_mode()` composition table:
+Entry: `src/main.py --run <hourly|daily|backfill|calendar> --symbols <db|file|screener>` → `pipeline/runner.py:run_mode()` composition table:
 - **hourly** — batched quotes → prices (gated on marketState / newer regularMarketTime)
 - **daily** — overview → statements → market data → metrics → financial analysis
 - **backfill** — same order as daily, full-history fetch, metrics skipped
+- **calendar** — standalone Yahoo earnings + economic event sweep → `stock_economic_calendar` (tier-2 statement optimizer; also appended as a final daily phase)
 
 ### Commands
 
@@ -104,6 +107,7 @@ python3 src/main.py --run hourly --symbols db            # hourly prices
 python3 src/main.py --run daily --symbols db             # full daily refresh
 python3 src/main.py --run backfill --symbols screener    # discovery + full backfill
 python3 src/main.py --run daily --symbols db --force     # correction mode
+python3 src/main.py --run calendar                       # earnings + economic event sweep
 
 # tests
 python -m pytest tests/                  # unit + golden (live auto-excluded)
@@ -134,6 +138,14 @@ GitHub Actions in `.github/workflows/` (Python 3.14). Workflows are `workflow_di
 |---|---|---|
 | `toolkit-stocks-hourly-prices.yml` | hourly :37 | `--run hourly --symbols db` |
 | `toolkit-stocks-daily.yml` | daily 08:23 | `--run daily --symbols db` + verify.py |
+| `toolkit-stocks-calendar.yml` | daily 06:47 | `--run calendar` (earnings/economic sweep) |
 | `toolkit-stocks-manual-backfill.yml` | manual only | `--run backfill --symbols screener` |
 | `tests.yml` (unit job) | push/PR (`toolkit-stocks/**`) | unit + golden tests |
 | `tests.yml` (live-smoke job) | daily 08:53 + manual dispatch | live smoke tests |
+
+Direct SQL maintenance jobs (pg_cron, no GitHub side):
+
+| Job | Schedule (UTC) | Command |
+|---|---|---|
+| `cron-run-details-cleanup` | daily 03:00 | purge `cron.job_run_details` > 7 days |
+| `purge-old-calendar-events` | daily 03:10 | purge `stock_economic_calendar` rows older than 6 months |

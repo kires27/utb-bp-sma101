@@ -7,7 +7,7 @@ warnings.filterwarnings("ignore", message="Timestamp.utcnow is deprecated.*")
 
 
 PHASES = ["overview", "balance", "cash", "income", "dividends", "prices", "splits", "metrics", "fa"]
-RUN_MODES = ["hourly", "daily", "backfill"]
+RUN_MODES = ["hourly", "daily", "backfill", "exchange", "calendar"]
 SYMBOL_MODES = ["db", "file", "screener"]
 
 parser = argparse.ArgumentParser(description="MICE script to insert/update data to database")
@@ -23,18 +23,21 @@ from lib.supabase.sql_functions import get_symbols, get_stock_id_map
 from pipeline.runner import run_mode
 from lib.functions.stats import report
 
-if args.symbols == "file":
-	from data.symbols import manual_symbols as symbols
-elif args.symbols == "screener":
-	from pipeline.screener import discover
-	discovery = discover()
-	# Backfill queue: only symbols discovery just inserted. Insert-only,
-	# so next scheduled run picks up anything missed today.
-	symbols = discovery["new_symbols"]
-else:
-	symbols = get_symbols()
-
-stock_ids = get_stock_id_map(symbols)
+# exchange seeds static reference data, calendar sweeps the universe-wide
+# calendar feed; both are standalone and unused symbols/stock_ids
+symbols, stock_ids = [], {}
+if args.run not in ("exchange", "calendar"):
+	if args.symbols == "file":
+		from data.symbols import manual_symbols as symbols
+	elif args.symbols == "screener":
+		from pipeline.screener import discover
+		discovery = discover()
+		# Backfill queue: only symbols discovery just inserted. Insert-only,
+		# so next scheduled run picks up anything missed today.
+		symbols = discovery["new_symbols"]
+	else:
+		symbols = get_symbols()
+	stock_ids = get_stock_id_map(symbols)
 printf(f"-- Run mode {args.run}, {len(symbols)} symbols ({args.symbols}) --", lv.INFO)
 
 # ctx phases gate on fetch-style flags; daily runs everything, backfill =

@@ -43,7 +43,21 @@ def run_mode(mode: str, args, symbols: list[str], stock_ids: dict[str, int], for
 	if mode == "hourly":
 		return [run_hourly_prices(symbols, stock_ids, force=force)]
 
+	if mode == "exchange":
+		from .exchange import run_exchange
+		return [run_exchange(force=force)]
+
+	if mode == "calendar":
+		from .calendar import run_calendar
+		return [run_calendar(force=force)]
+
 	if mode in ("daily", "backfill"):
-		return run_ctx_mode(mode, args, symbols, stock_ids)
+		phases = run_ctx_mode(mode, args, symbols, stock_ids)
+		if mode == "daily":
+			# calendar refresh rides on daily: announced earnings dates feed the
+			# future tier-2 statement optimizer
+			from .calendar import run_calendar
+			phases.append(run_calendar())
+		return phases
 
 	raise ValueError(f"Unknown run mode: {mode}")

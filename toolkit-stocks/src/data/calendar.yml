@@ -1,0 +1,38 @@
+# Calendar sweep configuration for the Yahoo v1/finance/visualization endpoint.
+# earnings sweeps per region (region operand in the query, mirrors screener.yml
+# region codes); economic_event is one global sweep -- each row carries its own
+# country_code, so there is nothing region-specific to page through.
+#
+# window_days is the lookahead window fetched on each sweep. Yahoo caps page
+# size at 100; MAX_PAGES in the source caps pagination per (region, type).
+window_days: 14
+event_types:
+  earnings:
+    entity_id_type: sp_earnings
+    sort_field: intradaymarketcap
+    sort_type: DESC
+    regions: [us, gb, fr, de, ch]
+    include_fields:
+      - ticker
+      - companyshortname
+      - intradaymarketcap
+      - eventname
+      - startdatetime
+      - startdatetimetype
+      - epsestimate
+      - epsactual
+      - epssurprisepct
+  economic_event:
+    entity_id_type: economic_event
+    sort_field: startdatetime
+    sort_type: ASC
+    regions: []
+    include_fields:
+      - econ_release
+      - country_code
+      - startdatetime
+      - period
+      - after_release_actual
+      - consensus_estimate
+      - prior_release_actual
+      - originally_reported_actual
