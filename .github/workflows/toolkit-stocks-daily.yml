@@ -5,7 +5,7 @@ on:
 
 jobs:
   run-script:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: ./toolkit-stocks
@@ -29,7 +29,7 @@ jobs:
 
       - name: Upload run summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: run-summary-daily
           path: toolkit-stocks/run_summary.txt
