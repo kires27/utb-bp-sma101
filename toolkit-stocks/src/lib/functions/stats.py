@@ -4,7 +4,7 @@ import os
 from lib.functions.netstats import snapshot
 from lib.module.printf import printf, level as lv
 
-_failed_cap = 20
+_failed_line_cap = 20		# PHASE log line is parseable input for verify.py; keep it bounded
 
 
 def new_phase(phase: str, symbols_total: int) -> dict:
@@ -17,13 +17,12 @@ def count_symbol(stats: dict, ok: bool, symbol: str = None, rows: int = 0):
 	if ok:
 		stats["symbols_ok"] += 1
 		stats["rows_written"] += rows
-	else:
-		if len(stats["failed_symbols"]) < _failed_cap and symbol:
-			stats["failed_symbols"].append(symbol)
+	elif symbol:
+		stats["failed_symbols"].append(symbol)
 
 
 def summary_line(stats: dict) -> str:
-	failed = stats["failed_symbols"]
+	failed = stats["failed_symbols"][:_failed_line_cap]
 	failed_str = f" first={','.join(failed)}" if failed else ""
 	return (
 		f"PHASE {stats['phase']} total={stats['symbols_total']} "
@@ -73,15 +72,14 @@ def _write_step_summary(phases: list[dict]):
 	try:
 		with open(path, "a", encoding="utf-8") as f:
 			f.write("## Pipeline run summary\n\n")
-			f.write("| phase | total | ok | rows written | skipped (fresh) | failed (first) |\n")
+			f.write("| phase | total | ok | rows written | skipped (fresh) | failed |\n")
 			f.write("|---|---|---|---|---|---|\n")
 			for stats in phases:
-				failed = ", ".join(stats["failed_symbols"][:5])
-				suffix = "…" if len(stats["failed_symbols"]) > 5 else ""
+				failed = ", ".join(stats["failed_symbols"])
 				f.write(
 					f"| {stats['phase']} | {stats['symbols_total']} | {stats['symbols_ok']} "
 					f"| {stats['rows_written']} | {stats.get('skipped_fresh', 0)} "
-					f"| {failed}{suffix} |\n"
+					f"| {failed} |\n"
 				)
 			f.write("\n")
 			net = snapshot()

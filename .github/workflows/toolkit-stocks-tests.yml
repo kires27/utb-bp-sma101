@@ -1,4 +1,4 @@
-name: tests
+name: Toolkit stocks tests
 
 on:
   push:

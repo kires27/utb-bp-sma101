@@ -1,4 +1,4 @@
-name: Toolkit stocks hourly prices
+name: Toolkit stocks hourly
 
 on:
   workflow_dispatch:

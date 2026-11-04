@@ -22,13 +22,21 @@ def test_count_symbol_ok_accumulates_rows():
 	assert stats["failed_symbols"] == []
 
 
-def test_count_symbol_failed_capped_at_20():
+def test_count_symbol_collects_all_failures():
 	stats = new_phase("prices", 30)
 	for i in range(25):
 		count_symbol(stats, False, symbol=f"S{i}")
-	assert len(stats["failed_symbols"]) == 20
+	assert len(stats["failed_symbols"]) == 25
 	assert stats["failed_symbols"][0] == "S0"
 	assert stats["symbols_ok"] == 0
+
+
+def test_summary_line_caps_failed_list_at_20():
+	stats = new_phase("prices", 30)
+	stats["failed_symbols"] = [f"S{i}" for i in range(25)]
+	line = summary_line(stats)
+	assert f"first={','.join(f'S{i}' for i in range(20))}" in line
+	assert "S24" not in line
 
 
 def test_summary_line_without_failures():

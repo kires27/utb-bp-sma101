@@ -1,7 +1,10 @@
 # README
 
-                   
-[![daily pipeline](https://github.com/kires27/utb-bp-sma101/actions/workflows/toolkit-stocks-daily.yml/badge.svg)](https://github.com/kires27/utb-bp-sma101/actions/workflows/toolkit-stocks-daily.yml)
+[![Toolkit stocks hourly](https://github.com/kires27/utb-bp-sma101/actions/workflows/toolkit-stocks-hourly.yml/badge.svg)](https://github.com/kires27/utb-bp-sma101/actions/workflows/toolkit-stocks-hourly.yml)
+[![Toolkit stocks calendar](https://github.com/kires27/utb-bp-sma101/actions/workflows/toolkit-stocks-calendar.yml/badge.svg)](https://github.com/kires27/utb-bp-sma101/actions/workflows/toolkit-stocks-calendar.yml)
+[![Toolkit stocks daily](https://github.com/kires27/utb-bp-sma101/actions/workflows/toolkit-stocks-daily.yml/badge.svg)](https://github.com/kires27/utb-bp-sma101/actions/workflows/toolkit-stocks-daily.yml)
+[![Toolkit stocks discover](https://github.com/kires27/utb-bp-sma101/actions/workflows/toolkit-stocks-discover.yml/badge.svg)](https://github.com/kires27/utb-bp-sma101/actions/workflows/toolkit-stocks-discover.yml)
+[![Toolkit stocks tests](https://github.com/kires27/utb-bp-sma101/actions/workflows/toolkit-stocks-tests.yml/badge.svg)](https://github.com/kires27/utb-bp-sma101/actions/workflows/toolkit-stocks-tests.yml)
 
 
 # Commands

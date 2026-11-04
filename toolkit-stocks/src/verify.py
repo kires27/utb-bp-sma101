@@ -3,7 +3,7 @@
 Run as a separate CI step after the pipeline. Exits non-zero on any failed check
 so the workflow goes red and GitHub sends the failure email.
 
-Usage: python src/verify.py --prices-quotes | --fa
+Usage: python src/verify.py prices-quotes | fa
 """
 import argparse
 import sys
@@ -124,7 +124,7 @@ def run(mode: str, log_path: str | None) -> int:
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description="Post-run pipeline verification")
-	parser.add_argument("mode", choices=["--prices-quotes", "--fa"])
+	parser.add_argument("mode", choices=["prices-quotes", "fa"])
 	parser.add_argument("--log", help="path to pipeline log file with PHASE summary lines")
 	args = parser.parse_args()
 	sys.exit(run(args.mode, args.log))
