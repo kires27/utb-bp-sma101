@@ -1,7 +1,8 @@
 # README
 
-[![daily pipeline](https://github.com/kires27/utb-fai/actions/workflows/toolkit-stocks-daily.yml/badge.svg)](https://github.com/kires27/utb-fai/actions/workflows/toolkit-stocks-daily.yml)
-[![manual backfill](https://github.com/kires27/utb-fai/actions/workflows/toolkit-stocks-manual-backfill.yml/badge.svg)](https://github.com/kires27/utb-fai/actions/workflows/toolkit-stocks-manual-backfill.yml)
+                   
+[![daily pipeline](https://github.com/kires27/utb-bp-sma101/actions/workflows/toolkit-stocks-daily.yml/badge.svg)](https://github.com/kires27/utb-bp-sma101/actions/workflows/toolkit-stocks-daily.yml)
+
 
 # Commands
 
