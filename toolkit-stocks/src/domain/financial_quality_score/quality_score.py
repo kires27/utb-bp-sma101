@@ -1,5 +1,5 @@
 from .utils.constants import METRIC_COLUMNS, HIGHER_IS_BETTER, GROUPS
-from .utils.sql import get_stock_ids_within_industry, get_financial_analysis, get_stock_industry
+from .utils.sql import get_stock_ids_within_sector, get_financial_analysis, get_stock_sector
 from .utils.func import normalize
 from datetime import date
 
@@ -13,8 +13,8 @@ def calculate_quality_score(
 	Get industry peers, normalize metrics 0–100, compute weighted quality_score.
 	Returns {stock_id, quality_score, category_scores}
 	"""
-	industry = get_stock_industry(target_stock_id)
-	peer_ids = get_stock_ids_within_industry(industry)
+	sector = get_stock_sector(target_stock_id)
+	peer_ids = get_stock_ids_within_sector(sector)
 
 	analyses = get_financial_analysis(peer_ids, fiscal_date, period)
 	if not analyses:

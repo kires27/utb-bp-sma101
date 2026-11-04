@@ -367,7 +367,7 @@ export type Database = {
           },
         ];
       };
-      stock_metric: {
+      stock_quote: {
         Row: {
           currency: string | null;
           maintenance_update: string;
@@ -435,22 +435,6 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
-      };
-      symbol_activity: {
-        Row: {
-          last_visit: string;
-          symbol: string;
-        };
-        ComputedFields: never;
-        Insert: {
-          last_visit?: string;
-          symbol: string;
-        };
-        Update: {
-          last_visit?: string;
-          symbol?: string;
-        };
-        Relationships: [];
       };
       watchlist: {
         Row: {

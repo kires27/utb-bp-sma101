@@ -5,13 +5,10 @@ from lib.functions.data_types import time_to_timestamptz
 from lib.module.printf import printf, level as lv
 
 
-def build_metric_row(symbol: str, stock_id: int, quote: dict) -> dict:
+def build_quote_row(symbol: str, stock_id: int, quote: dict) -> dict:
 	'''
 	quote: normalized {stock_price, market_cap, regular_market_change_percent,
 	regular_market_change, regular_market_time, source}.
-	DefeatBeta (US): EOD close/shares-derived values, regular_market_time is None
-	(key omitted on upsert -> old value preserved).
-	yfinance (non-US): live info() fields.
 	'''
 	try:
 		if not isinstance(symbol, str):

@@ -2,6 +2,7 @@ import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from lib.functions.netstats import incr_yf
 from lib.module.printf import printf, level as lv
 
 
@@ -72,6 +73,7 @@ class YFinanceSource:
 		import yfinance as yf
 
 		for attempt in range(MAX_RETRIES):
+			incr_yf()
 			try:
 				return fn(*args, **kwargs)
 			except yf.YFRateLimitError as err:
@@ -97,7 +99,7 @@ class YFinanceSource:
 	GBP_STYLE_CURRENCIES = ("GBp", "GBX")
 
 	def quote(self, symbol: str) -> dict | None:
-		'''Live quote fields for stock_metric, straight from info().'''
+		'''Live quote fields for stock_quote, straight from info().'''
 		info = self.info(symbol)
 		if not info:
 			return None
@@ -114,8 +116,6 @@ class YFinanceSource:
 			"regular_market_change_percent": info.get("regularMarketChangePercent"),
 			"regular_market_change": info.get("regularMarketChange"),
 			"regular_market_time": info.get("regularMarketTime"),
-			# yfinance reports percent (2.94); normalize to fraction for fac.dividend_yield
-			"dividend_yield": (info.get("dividendYield") / 100) if info.get("dividendYield") else None,
 		}
 
 	def history(self, symbol: str, period: str = "max") -> object | None:

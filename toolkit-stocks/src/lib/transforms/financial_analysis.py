@@ -2,16 +2,19 @@ import traceback
 from datetime import datetime, timezone
 
 import domain.financial_analysis.fa_calculations as fac
-from lib.supabase.sql_functions import get_statements_by_stock
+from lib.supabase.sql_functions import get_statements_by_stock, get_ttm_dividends
 from lib.module.printf import printf, level as lv
 import constants.db_tables as dbt
 
 
 def build_financial_analysis(symbol: str, stock_id: int, quote: dict) -> dict:
 	'''
-	quote: normalized {stock_price, market_cap, dividend_yield} from the
-	routed datasource (DefeatBeta EOD for US, yfinance info for non-US).
-	Statement data comes from DB rows written by --balance/--cash/--income.
+	quote: normalized {stock_price, market_cap} from stock_quote (written by
+	the quote phase). Statement data comes from DB rows written by
+	--balance/--cash/--income; dividend_yield is computed from stock_dividend
+	(TTM sum over current price), not from any quote source. quality_score is
+	NOT written here - the faqs phase upserts it separately (writing NULL
+	here would wipe the score every daily run).
 	'''
 	try:
 		if not isinstance(symbol, str):
@@ -47,7 +50,7 @@ def build_financial_analysis(symbol: str, stock_id: int, quote: dict) -> dict:
 		total_debt = balance_sheets[0].get("total_debt")
 
 		earnings_per_share = fac.earning_per_share(net_income, share_issued, dividends_on_preferred_stocks)
-		dividend_yield = quote.get("dividend_yield")
+		ttm_dividends = get_ttm_dividends(stock_id)
 
 		return {
 			"data": {
@@ -65,7 +68,7 @@ def build_financial_analysis(symbol: str, stock_id: int, quote: dict) -> dict:
 				"capital_index": fac.capital_index(net_income, capital_expenditure),
 				"current_ratio": fac.current_ratio(current_assets, current_liabilities),
 				"debt_to_equity": fac.debt_to_equity(total_liabilities, stockholders_equity),
-				"dividend_yield": fac.dividend_yield(dividend_yield),
+				"dividend_yield": fac.dividend_yield(ttm_dividends, price),
 				"earning_per_share": earnings_per_share,
 				"gross_margin": fac.gross_margin(gross_profit, total_revenue),
 				"net_margin": fac.net_margin(net_income, total_revenue),
@@ -75,7 +78,6 @@ def build_financial_analysis(symbol: str, stock_id: int, quote: dict) -> dict:
 				"payback_period": fac.payback_period(total_debt, free_cash_flow),
 				"return_on_equity": fac.return_on_equity(net_income, stockholders_equity),
 				"revenues_per_share": fac.revenues_per_share(total_revenue, share_issued),
-				"quality_score": None
 			},
 			"fiscal_date": fiscal_date,
 			"period": period,

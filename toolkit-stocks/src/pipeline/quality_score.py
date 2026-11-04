@@ -1,0 +1,31 @@
+from lib.functions.stats import count_symbol, new_phase
+from lib.transforms import build_quality_score
+from lib.module.printf import printf, level as lv
+from lib.supabase.sql_functions import insert_data_statement
+import constants.db_tables as dbt
+from .context import valid_symbols
+
+
+def run_quality_score(ctx):
+	'''
+	fqs phase: peer-normalized quality score per symbol. Runs strictly after
+	fa, so peer normalization reads fresh FA rows for the whole universe -
+	this is why scoring is a separate phase, not folded into insert_fa.
+	'''
+	targets = valid_symbols(ctx)
+	stats = new_phase("fqs", len(targets))
+
+	for symbol in targets:
+		fqs = build_quality_score(ctx.stock_ids[symbol])
+		if not fqs:
+			count_symbol(stats, False, symbol)
+			continue
+
+		rows = insert_data_statement(fqs["data"], dbt.analysis, update_condition={
+			"stock_id": ctx.stock_ids[symbol],
+			"fiscal_date": fqs["fiscal_date"],
+			"period": fqs["period"],
+		})
+		count_symbol(stats, True, rows=rows)
+
+	return stats

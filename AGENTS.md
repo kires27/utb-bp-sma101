@@ -59,7 +59,7 @@ Shared client-side code, **explicit imports required** (no auto-import).
 stock/
   GET  [symbol].get.js                      stock overview
   GET  metric/[symbol].get.js               real-time price/metrics
-  GET  financial-analysis/[symbol].get.js   FA metrics + industry medians
+  GET  financial-analysis/[symbol].get.js   FA metrics + sector medians
   GET  search-history.get.js                batch stock name + price by symbol list
   GET  search/[input].get.js                search by symbol/name
   GET  stock-list/[limit].get.js            list stocks
@@ -132,11 +132,11 @@ Tokens in `app/styles/app.css` CSS variables. Never hardcode colors.
 # Venv
 source .venv/bin/activate
 
-# Run modes (the only CLI surface)
-python3 src/main.py --run hourly --symbols db            # hourly: batched v7/quote, marketState-gated
-python3 src/main.py --run daily --symbols db             # daily: all phases incl. metrics
-python3 src/main.py --run backfill --symbols screener    # manual: screener discovery + full history
-python3 src/main.py --run daily --symbols db --force     # correction mode: re-pull everything
+# Phases (the only CLI surface; order in --phases irrelevant)
+python3 src/main.py --phases quote --symbols db                          # batched v7/quote, marketState-gated
+python3 src/main.py --phases quote,overview,statements,prices,dividends,splits,fa,fqs,calendar --symbols db   # full daily set
+python3 src/main.py --phases overview,statements,prices,dividends,splits,fa,fqs --symbols screener --full   # manual: screener discovery + full history
+python3 src/main.py --phases quote,overview,statements,prices,dividends,splits,fa,fqs,calendar --symbols db --force   # correction mode: re-pull everything
 
 # Tests
 python -m pytest tests/              # unit + golden (live auto-excluded via addopts)
@@ -155,11 +155,11 @@ Full test suite is done; test plan file deleted. Repo roadmap: `PLAN-rewrite-too
 
 Workflows in `.github/workflows/` (repo root), Python 3.14. All scheduling lives in **Supabase pg_cron** (jobs `gh-dispatch-*` call the GitHub `workflow_dispatch` API using the `github_pat` Vault secret) — workflows themselves have **no `on: schedule`** triggers. Times are UTC (pg_cron), offset from minute 0 to avoid GitHub scheduler congestion.
 
-- `toolkit-stocks-hourly-prices.yml` — `--run hourly --symbols db` every hour :37.
-- `toolkit-stocks-daily.yml` — `--run daily --symbols db` daily 08:23 UTC (`DATABASE_URL` secret) + verify.py.
-- `toolkit-stocks-calendar.yml` — `--run calendar` daily 06:47 UTC (earnings + economic event sweep → `stock_economic_calendar`).
-- `toolkit-stocks-manual-backfill.yml` — `--run backfill --symbols screener` (manual dispatch; verify.py `--fa`).
-- `tests.yml` — unit+golden on push/PR (path-filtered to `toolkit-stocks/**`), live smoke daily 08:53 UTC via dispatch + `workflow_dispatch`.
+- `toolkit-stocks-hourly.yml` — `--phases quote --symbols db` every hour :37.
+- `toolkit-stocks-daily.yml` — `--phases overview,statements,prices,dividends,splits,fa,fqs --symbols db` daily 08:23 UTC (`DATABASE_URL` secret) + verify.py. No quote (hourly owns it), no calendar (standalone owns it).
+- `toolkit-stocks-calendar.yml` — `--phases calendar` daily 06:47 UTC (earnings + economic event sweep → `stock_economic_calendar`).
+- `toolkit-stocks-discover.yml` — `--phases overview,statements,prices,dividends,splits,fa,fqs --symbols screener --full` (manual dispatch; verify.py `--fa`). Insert-only universe expansion: screener returns only NEWLY inserted symbols as backfill queue; existing stocks never touched.
+- `toolkit-stocks-tests.yml` — unit+golden on push/PR (path-filtered to `toolkit-stocks/**`), live smoke daily 08:53 UTC via dispatch + `workflow_dispatch`.
 - `cron-run-details-cleanup` (pg_cron, no GitHub side) — purges `cron.job_run_details` >7 days, 03:00 UTC.
 - `purge-old-calendar-events` (pg_cron, no GitHub side) — purges `stock_economic_calendar` rows with `event_datetime` older than 6 months, 03:10 UTC.
 
@@ -167,11 +167,12 @@ Monitor dispatches: `cron.job_run_details` (did the job fire) + `net._http_respo
 
 ## Entrypoint & Flow
 
-`src/main.py` — parses `--run <mode> --symbols <db|file|screener>` (mutually exclusive with nothing; `--force` global) and hands off to `pipeline/runner.py:run_mode()`, the composition table:
+`src/main.py` — parses `--phases <comma,list> --symbols <db|file|screener>` (+ `--force`, `--full` global) and hands off to `pipeline/runner.py:run_phases()`, which executes each selected phase in fixed dependency order:
 
-- `hourly` — `pipeline/prices.py`: batched v7/quote (≤500/call via `datasource/quotes_batch.py`), marketState-gated writes (REGULAR/POST, or newer `regular_market_time` than stored).
-- `daily` — `RunContext` phases in fixed order: overview → statements (balance/cash/income) → market data (prices/splits/dividends, incremental via `history(start=<last_db_date>)`) → metrics → financial analysis.
-- `backfill` — same order as daily but `args.full=True` (full-history fetch) and metrics skipped (next hourly run covers).
+- `quote` — `pipeline/prices.py`: batched v7/quote (≤500/call via `datasource/quotes_batch.py`), marketState-gated writes (REGULAR/POST, or newer `regular_market_time` than stored) to `stock_quote`. Covers everything the deleted per-symbol `metrics` phase did.
+- `overview`/`statements`/`prices`/`dividends`/`splits`/`fa`/`fqs` — `RunContext` phases in fixed order; statements run all three tables (balance/cash/income) internally; prices/dividends/splits share one history payload per symbol, writes gated per flag by `market_data._want()`; `fqs` upserts `quality_score` into `stock_financial_analysis` after all FA rows are written (peer normalization reads fresh data; FA itself never writes the score).
+- `calendar`/`exchange` — standalone, no symbol discovery (skip when phase list is only these).
+- `--full` = full-history fetch (read by prices/statements); `--force` = bypass freshness, re-pull all.
 
 Symbol discovery: `db` (already in `stock`), `file` (`data/symbols.py` manual list), `screener` (YAML config → EquityQuery, paginated 250/page, insert-only into `stock`; returns only newly inserted symbols = backfill queue for this run).
 
@@ -181,18 +182,19 @@ Single unified source: yfinance for all regions (DefeatBeta removed). Writes to 
 
 ```
 src/
-  main.py                           entrypoint — argparse (--run/--symbols/--force), loads .env, calls runner.run_mode()
+  main.py                           entrypoint — argparse (--phases/--symbols/--full/--force), loads .env, calls runner.run_phases()
   constants/db_tables.py            table name constants
   datasource/                       data sources (fetch + normalize payloads)
     quotes_batch.py                 QuotesBatchSource — batched v7/quote (≤500/call), GBp fix, marketState
     yfinance_source.py              YfinanceSource — threaded executor (per-symbol), history/statements/info
     base.py                         shared alias maps (STATEMENT_FIELD_MAP), normalize_title
   pipeline/                         orchestration
-    runner.py                       run_mode() — composition table: hourly | daily | backfill
+    runner.py                       run_phases() — gated execution of selected phases in fixed order
     context.py                      RunContext — passive shared state (symbols, stock_ids, meta, yfs)
-    prices.py                       hourly batch flow (v7/quote, marketState gating)
+    prices.py                       quote phase (v7/quote batch, marketState gating) → stock_quote
     screener.py                     discovery: screener.yml → EquityQuery → paginated screen(), insert-only
-    overview.py, statements.py, market_data.py, metrics.py, financial_analysis.py
+    overview.py, statements.py, market_data.py, financial_analysis.py,
+    quality_score.py                fqs phase (quality score upsert, after fa)
   lib/                              support code (no domain logic)
     transforms/                     normalized payload → DB row mappers (source-agnostic)
       overview.py, statements.py, events.py, prices.py, metrics.py,
@@ -226,13 +228,7 @@ src/
 
 `domain/financial_quality_score/quality_score.py:calculate_quality_score()` computes peer-normalized weighted score for a target stock.
 
-Flow: industry → get peer IDs → fetch their financial analysis at same fiscal_date/period → min-max normalize 0–100 per metric → group into 6 weighted categories → sum → return `{quality_score, category_scores}`.
-
-### Known Bugs in `domain/financial_quality_score/utils/sql.py`
-
-- **`get_stock_industry()`** — returns tuple `(industry,)`, not string. Caller must index `[0]`.
-
-(Fixed: `get_stock_ids_within_industry()` now uses `fetchall()`.)
+Flow: sector (broad field) → get peer IDs → fetch their financial analysis at same fiscal_date/period → min-max normalize 0–100 per metric → group into 6 weighted categories → sum → return `{quality_score, category_scores}`.
 
 ## DB Schema Notes
 
@@ -240,8 +236,8 @@ Flow: industry → get peer IDs → fetch their financial analysis at same fisca
 - `stock_financial_analysis` table key columns: `stock_id`, `fiscal_date`, `period` (enum: `FY`/`Q1`–`Q4`/`TTM`), `quality_score`, plus 19 metric columns.
 - All percent/ratio fields stored as raw values (0–1 or 0–100), not formatted strings.
 - Metric columns: `gross_margin`, `operating_margin`, `net_margin`, `return_on_equity`, `earnings_per_share`, `debt_to_equity`, `debt_growth`, `current_ratio`, `revenue_growth`, `gross_income_growth`, `net_income_growth`, `retained_earning_growth`, `revenues_per_share`, `capital_index`, `payback_period`, `assets_price`, `pe_ratio`, `pb_ratio`, `dividend_yield`.
-- `stock` table has `industry` + `sector` columns (populated by the overview phase).
-- `stock_metric` table stores real-time price/market-cap (updated per run).
+- `stock` table has `industry` + `sector` columns (populated by the overview phase). Standard GICS convention: `sector` = broad (Technology, Healthcare, ...) and is the peer-group field for FA medians (`get_all_medians` RPC, param `p_stock_sector`) + quality score; `industry` = fine-grained (Consumer Electronics, ...).
+- `stock_quote` table stores real-time price/market-cap (updated per run).
 
 ## Conventions
 

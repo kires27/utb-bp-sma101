@@ -1,7 +1,7 @@
 import { supabaseClientAuth } from '~~/server/utils/supabase/auth';
 
 import calculateIntrinsicValue from "~~/server/calculations/intrinsicValue";
-import { getFinancialStatement, getMetric, getStock } from "#shared/query/stock";
+import { getFinancialStatement, getQuote, getStock } from "#shared/query/stock";
 import { validateIntrinsicValueInputs } from "#shared/validators/intrinsic-value";
 
 export default defineEventHandler(async (event) => {
@@ -21,13 +21,13 @@ export default defineEventHandler(async (event) => {
 	const stock = await getStock(client, symbol, ["id"]);
 	const id = stock.id;
 
-	const metrics = await getMetric(client, id, ["market_cap", "stock_price"]);
+	const quote = await getQuote(client, id, ["market_cap", "stock_price"]);
 	const cashFlow = await getFinancialStatement(client, id, "stock_cash_flow", projectionHorizon);
 	const balanceSheet = await getFinancialStatement(client, id, "stock_balance_sheet", 1);
 
 	return calculateIntrinsicValue(
-		metrics["market_cap"],
-		metrics["stock_price"],
+		quote["market_cap"],
+		quote["stock_price"],
 		balanceSheet[0]["cash_cash_equivalents_and_short_term_investments"],
 		balanceSheet[0]["share_issued"],
 		cashFlow,

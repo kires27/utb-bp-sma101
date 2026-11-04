@@ -1,5 +1,12 @@
 # Pracovní deník
 
+## 2.11.2026
+FA fáze čte tržní data z `stock_quote` místo per-symbol yfinance volání (plan `PLAN-fa-metric-price.md`). Smazán `yf_quote` closure a `yfs.map_symbols`, místo toho jeden bulk read přes nové `get_metric_quotes(stock_ids)` (vrací jen `{stock_price, market_cap}`); chybějící řádek / null price / null market_cap = skip symbolu s chybou pojmenovávající chybějící pole (žádný fallback fetch, screener symboly dostanou FA až v dalším daily runu).
+
+Zrušeno (týž den): původně přidaný sloupec `stock_quote.dividend_yield` — redundantní, `stock_financial_analysis.dividend_yield` už hodnotu ukládá. Sloupec dropped (kire DB + `sql/2026-11-02_stock_quote_dividend_yield.sql` přepsán na DROP). dividend_yield nyní FA počítá sama: nové `get_ttm_dividends(stock_id)` (SUM přes `stock_dividend`, rolling 365 dní, split-adjusted) ÷ aktuální cena v `build_financial_analysis`; `fac.dividend_yield(ttm, price)` — 0/None ttm nebo cena → NULL (non-payer). Zdroje quote dictů (quotes_batch, yfinance_source) už yield nenesou. Smoke: AAPL ttm 1.06 → 0.31 % při 338.32 (sedí s původním Yahoo 0.0031); MSFT ttm 0 (dividenda historie se dofetche v dalším dividends runu).
+
+Dále: quality score vyčleněn do vlastní fáze `fqs` (po `fa`, jen přes ní). Důvod: `insert_and_score` dělal 2 upserty na symbol (FA řádek + score) a score se počítal hned po zápisu vlastního řádku — peer normalizace četla pro portionu vesmíru stará data. Nyní `fa` píše čisté FA metriky (`build_financial_analysis` už nepíše `quality_score: None` — jinak by upsert scores z předchozích runů přemazal), `fqs` fáze (`pipeline/quality_score.py`, `run_quality_score`) projde všechny symboly a upsertuje `{quality_score, median_comparison}` přes `build_quality_score`. Výhody: 1 upsert fáze na symbol, peer data vždy čerstvá celého runu, `fqs` nezávisle spustitelná (re-score bez refetch). Daily i manual-backfill workflow + AGENTS.md příklady rozšířeny o `fqs`. Test suite 172 passed, 6 skipped (nový `test_fqs_phase.py`).
+
 ## 28.10.2026
 Rebasing dividendů při novém splitu přes DB trigger: `stock_dividend` má sloupec `split_adjusted_on` (default `now()`, guard proti dvojímu dělení), AFTER INSERT trigger `trg_stock_split_recalc` na `stock_split` přepočítá starší dividenda řádky (dělení faktorem) přímo v databazi — bez refetch. `build_split_rows` řadí eventy od nejstaršího (pořadí insertu je kritické). Ověřeno syntetickým testem (2 splits × 2.0 → ÷4, rollback). Dokumentace v AGENTS.md, migrace `sql/2026-10-28_split_trigger_recalc.sql`.
 
@@ -96,7 +103,7 @@ První verze financial-analysis pipeline: základní poměry (ROE, marže, EPS, 
 Přidány pipeline `--prices`, `--splits` a `--dividends` pro historická data.
 
 ## 25.04.2026
-Přidán pipeline `--metrics` pro real-time cenu a tržní kapitalizaci do tabulky `stock_metric`.
+Přidán pipeline `--metrics` pro real-time cenu a tržní kapitalizaci do tabulky `stock_quote`.
 
 ## 22.04.2026
 První pipeline: `--overview`. Načítá metadata akcií přes yahooquery a plní tabulku `stock` obory a sektory.

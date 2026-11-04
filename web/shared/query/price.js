@@ -1,7 +1,7 @@
 import { TABLES } from "../constants/database.js";
 
 /**
- * Read one stock_metric row by stock_id.
+ * Read one stock_quote row by stock_id.
  * @param {any} client - supabase client
  * @param {number} stockId
  * @param {string[]} columns
@@ -11,7 +11,7 @@ export async function getPriceRow(client, stockId, columns = ["*"]) {
 	const selectClause = columns.join(",");
 
 	const { data, error } = await client
-		.from(TABLES.metric)
+		.from(TABLES.quote)
 		.select(selectClause)
 		.eq("stock_id", stockId)
 		.limit(1);
@@ -22,7 +22,7 @@ export async function getPriceRow(client, stockId, columns = ["*"]) {
 }
 
 /**
- * Upsert price fields into stock_metric (service-key client expected).
+ * Upsert price fields into stock_quote (service-key client expected).
  * @param {any} client - supabase client (admin)
  * @param {number} stockId
  * @param {object} patch - { stock_price, market_cap, regular_market_change,
@@ -33,26 +33,8 @@ export async function upsertPriceRow(client, stockId, patch) {
 	const row = { stock_id: stockId, ...patch };
 
 	const { error } = await client
-		.from(TABLES.metric)
+		.from(TABLES.quote)
 		.upsert(row, { onConflict: "stock_id" });
-
-	if (error) throw new Error(error.message);
-}
-
-/**
- * Record that a user is looking at this symbol right now.
- * Fire-and-forget friendly — caller may not await.
- * @param {any} client - supabase client (admin, RLS blocks anon writes)
- * @param {string} symbol
- * @returns {Promise<void>}
- */
-export async function touchSymbolActivity(client, symbol) {
-	const { error } = await client
-		.from(TABLES.symbolActivity)
-		.upsert(
-			{ symbol, last_visit: new Date().toISOString() },
-			{ onConflict: "symbol" }
-		);
 
 	if (error) throw new Error(error.message);
 }
@@ -60,7 +42,7 @@ export async function touchSymbolActivity(client, symbol) {
 /**
  * Staleness check against regular_market_time (UTC ISO string).
  * Missing/null timestamp counts as stale.
- * @param {object|null} row - stock_metric row
+ * @param {object|null} row - stock_quote row
  * @param {number} maxAgeMs - default 3 minutes
  * @returns {{ stale: boolean, ageMs: number|null }}
  */

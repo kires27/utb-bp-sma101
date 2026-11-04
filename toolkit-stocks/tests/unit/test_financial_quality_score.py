@@ -53,8 +53,8 @@ def test_calculate_quality_score_success():
 		105: 56.67,
 	}
 
-	with (patch("domain.financial_quality_score.quality_score.get_stock_industry", return_value=fake_industry),
-		  patch("domain.financial_quality_score.quality_score.get_stock_ids_within_industry", return_value=fake_peers),
+	with (patch("domain.financial_quality_score.quality_score.get_stock_sector", return_value=fake_industry),
+		  patch("domain.financial_quality_score.quality_score.get_stock_ids_within_sector", return_value=fake_peers),
 		  patch("domain.financial_quality_score.quality_score.get_financial_analysis", return_value=fake_analyses)):
 
 		result1 = calculate_quality_score(

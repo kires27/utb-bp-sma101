@@ -1,6 +1,7 @@
 """Per-run phase stats: collection, parseable summary, optional GITHUB_STEP_SUMMARY write."""
 import os
 
+from lib.functions.netstats import snapshot
 from lib.module.printf import printf, level as lv
 
 _failed_cap = 20
@@ -31,6 +32,12 @@ def summary_line(stats: dict) -> str:
 	)
 
 
+def network_line() -> str:
+	'''Parseable NETWORK line from the run-level request counters.'''
+	net = snapshot()
+	return f"NETWORK yfinance={net['yfinance']} db={net['db']}"
+
+
 def report(phases: list[dict], prod: bool = False):
 	'''Print parseable PHASE lines + machine-readable summary (prod runs only).'''
 	if not phases:
@@ -40,6 +47,7 @@ def report(phases: list[dict], prod: bool = False):
 	printf("---- FINAL SUMMARY ----", lv.INFO)
 	for stats in phases:
 		printf(summary_line(stats), lv.INFO)
+	printf(network_line(), lv.INFO)
 
 	if prod:
 		_write_machine_file(phases)
@@ -52,6 +60,7 @@ def _write_machine_file(phases: list[dict]):
 		with open("run_summary.txt", "w", encoding="utf-8") as f:
 			for stats in phases:
 				f.write(summary_line(stats) + "\n")
+			f.write(network_line() + "\n")
 	except OSError as err:
 		printf(f"Could not write run summary file: {err}", lv.WARNING)
 
@@ -75,5 +84,7 @@ def _write_step_summary(phases: list[dict]):
 					f"| {failed}{suffix} |\n"
 				)
 			f.write("\n")
+			net = snapshot()
+			f.write(f"**Network requests:** yfinance {net['yfinance']} · db {net['db']}\n\n")
 	except OSError as err:
 		printf(f"Could not write step summary: {err}", lv.WARNING)

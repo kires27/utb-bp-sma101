@@ -24,32 +24,33 @@ export default defineEventHandler(async (event) => {
 	const stockIds = page.map((r) => r.stock_id)
 	const faByStockId = Object.fromEntries(page.map((r) => [r.stock_id, r]))
 
-	// stocks + metrics don't depend on each other — parallelize
-	const [{ data: stocks, error: stocksErr }, { data: metrics, error: metricsErr }] = await Promise.all([
-		client.from('stock').select('id, symbol, industry').in('id', stockIds),
-		client.from('stock_metric').select('stock_id, stock_price').in('stock_id', stockIds),
+	// stocks + quotes don't depend on each other — parallelize
+	const [{ data: stocks, error: stocksErr }, { data: quotes, error: quotesErr }] = await Promise.all([
+		client.from('stock').select('id, symbol, sector').in('id', stockIds),
+		client.from('stock_quote').select('stock_id, stock_price').in('stock_id', stockIds),
 	])
 
 	if (stocksErr)
 		throw createError({ statusCode: 500, statusMessage: stocksErr.message })
-	if (metricsErr)
-		throw createError({ statusCode: 500, statusMessage: metricsErr.message })
+	if (quotesErr)
+		throw createError({ statusCode: 500, statusMessage: quotesErr.message })
 
 	const stockById = Object.fromEntries((stocks || []).map((s) => [s.id, s]))
-	const priceMap = Object.fromEntries((metrics || []).map((m) => [m.stock_id, m.stock_price]))
+	const priceMap = Object.fromEntries((quotes || []).map((q) => [q.stock_id, q.stock_price]))
 
 	const sortedStocks = stockIds.map((id) => stockById[id]).filter(Boolean)
-	const industries = [...new Set(sortedStocks.map((s) => s.industry).filter(Boolean))]
+	// sector = broad peer-group field (GICS convention)
+	const sectors = [...new Set(sortedStocks.map((s) => s.sector).filter(Boolean))]
 
-	// Median RPCs are independent per industry — parallelize
+	// Median RPCs are independent per sector — parallelize
 	const medianEntries = await Promise.all(
-		industries.map(async (industry) => {
+		sectors.map(async (sector) => {
 			const { data: medians } = await client.rpc('get_all_medians', {
 				p_table_fa: 'stock_financial_analysis',
 				p_table_stock: 'stock',
-				p_stock_industry: industry,
+				p_stock_sector: sector,
 			})
-			return [industry, medians]
+			return [sector, medians]
 		})
 	)
 	const medianMap = Object.fromEntries(medianEntries.filter(([, m]) => m))
@@ -60,7 +61,7 @@ export default defineEventHandler(async (event) => {
 		for (const key of Object.keys(FINANCIALS_SHAPE)) {
 			result[key] = {
 				value: fa[key] ?? null,
-				median: medianMap[s.industry]?.[key] ?? null,
+				median: medianMap[s.sector]?.[key] ?? null,
 			}
 		}
 		return {

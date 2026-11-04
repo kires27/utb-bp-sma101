@@ -85,7 +85,7 @@ symbols (--symbols db | file | screener)
     ▼
 4. UPLOAD ───── psycopg2 → PostgreSQL/Supabase
     chunked bulk inserts (RowFlusher), per-table conflict strategy
-    (stock, stock_historical_price, stock_statement_*, stock_metric,
+    (stock, stock_historical_price, stock_statement_*, stock_quote,
     stock_financial_analysis …)
 ```
 

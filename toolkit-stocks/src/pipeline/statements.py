@@ -4,13 +4,23 @@ from lib.functions.stats import count_symbol, new_phase
 from lib.transforms import build_statement_rows
 from lib.transforms.statements import group_statement_records
 from lib.module.printf import printf, level as lv
-from lib.supabase.sql_functions import get_fresh_stock_ids, get_stamped_stock_ids, touch_statement_rows, RowFlusher
+from lib.supabase.sql_functions import (
+	get_quarterly_fetch_ids, get_stamped_stock_ids, get_fresh_stock_ids,
+	touch_statement_rows, RowFlusher,
+)
+from constants.pipeline import (
+	EARNINGS_EVENT_LOOKAHEAD_DAYS, MAX_SUPPRESSION_GAP_DAYS, QUARTERLY_FISCAL_WINDOW_DAYS,
+)
+import constants.db_tables as dbt
 from .context import valid_symbols
 
 
 # Newest annual fiscal_date must be at least this recent for a symbol to count
 # as "has current data" (~covers FY ending last year without one 400+ days old).
 FRESH_FISCAL_WINDOW_DAYS = 380
+
+# Tables scanned together for the cross-table quarterly staleness gap.
+QUARTERLY_STATEMENT_TABLES = [dbt.balance_sheet, dbt.cash_flow, dbt.income_statement]
 
 # Streaming flush size for statement upserts: conflict on the natural key so
 # restated figures DO UPDATE instead of being dropped as duplicates.
@@ -35,23 +45,74 @@ def fresh_symbols(ctx, db_table: str, targets: list[str]) -> set[str]:
 	return fresh
 
 
-def run_statements(ctx, finance_type: str, db_table: str, null_tolerance: float):
-	'''One statement kind: balance_sheet | cash_flow | income_statement. Annual only.'''
+def quarterly_fetch_decision(gap_days: int | None, next_event_days_out: int | None) -> bool:
+	'''True = fetch quarterly statement data for the symbol.
+
+	Pure counterpart of the SQL in get_quarterly_fetch_ids.
+
+	gap_days: today - newest fiscal_date across the three statement tables.
+		None = no rows at all -> unknown -> fetch (COALESCE fallback).
+	next_event_days_out: days until the nearest known future earnings event.
+		None = no known event -> fetch (gap-trigger fallback).
+
+	Fetch iff stale AND NOT suppressed:
+	- fresh (gap <= QUARTERLY_FISCAL_WINDOW_DAYS) -> no fetch;
+	- suppressed (event beyond lookahead AND gap < MAX_SUPPRESSION_GAP_DAYS)
+		-> no fetch (dead-fetch elimination);
+	- everything else -> fetch: no event, event within lookahead, event
+		postponed until near-term, or gap too old for suppression to be safe.
+	'''
+	gap = gap_days if gap_days is not None else 999_999	# unknown -> maximally stale
+	if gap <= QUARTERLY_FISCAL_WINDOW_DAYS:
+		return False	# fresh
+	if next_event_days_out is not None and next_event_days_out > EARNINGS_EVENT_LOOKAHEAD_DAYS \
+			and gap < MAX_SUPPRESSION_GAP_DAYS:
+		return False	# suppressed: known far-future earnings, data not too old
+	return True
+
+
+def quarterly_targets(ctx, db_table: str, targets: list[str]) -> list[str]:
+	'''Quarterly fetch targets: stale-and-not-suppressed symbols, plus legacy
+	NULL-stamp rows in this table (refetched and stamped once).'''
+	stock_ids = [ctx.stock_ids[s] for s in targets]
+	fetch_ids = get_quarterly_fetch_ids(QUARTERLY_STATEMENT_TABLES, stock_ids)
+	stamped_ids = get_stamped_stock_ids(db_table, stock_ids)
+	needed = [
+		s for s in targets
+		if ctx.stock_ids[s] in fetch_ids or ctx.stock_ids[s] not in stamped_ids
+	]
+	printf(f"{db_table}: {len(needed)}/{len(targets)} symbols stale/unknown -> fetch", lv.INFO)
+	return needed
+
+
+def run_statements(ctx, finance_type: str, db_table: str, null_tolerance: float, period_type: str = "annual"):
+	'''One statement kind: balance_sheet | cash_flow | income_statement.
+
+	period_type selects the fetch strategy: "annual" uses the 380-day window
+	per table; "quarterly" uses the calendar-suppressed staleness window and
+	fetches quarterly payloads for stale-and-not-suppressed symbols only.
+	'''
 	yfs = ctx.yfs
-	period_type = "annual"
 	targets = valid_symbols(ctx)
-	stats = new_phase(finance_type, len(targets))
+	phase_name = finance_type if period_type == "annual" else f"{finance_type}_{period_type}"
+	stats = new_phase(phase_name, len(targets))
 
 	force = getattr(ctx.args, "force", False)
 	full = getattr(ctx.args, "full", False)
+	skipped_symbols: list[str] = []
 
 	if force or full:
 		printf(f"{finance_type}: {'force' if force else 'full'} set, fetching all symbols", lv.INFO)
 		needed = targets
-	else:
+	elif period_type == "annual":
 		fresh = fresh_symbols(ctx, db_table, targets)
 		needed = [s for s in targets if s not in fresh]
+		skipped_symbols = sorted(fresh)
 		stats["skipped_fresh"] = len(fresh)
+	else:
+		needed = quarterly_targets(ctx, db_table, targets)
+		skipped_symbols = [s for s in targets if s not in needed]
+		stats["skipped_fresh"] = len(skipped_symbols)
 
 	def yf_records(sym):
 		return yfs.statements_payload(sym, finance_type, period_type)
@@ -82,9 +143,9 @@ def run_statements(ctx, finance_type: str, db_table: str, null_tolerance: float)
 
 	stats["rows_written"] = flusher.finish()
 
-	# Fresh symbols skipped: bump updated_at so their staleness clock restarts
-	if not force and stats.get("skipped_fresh"):
-		fresh_ids = [ctx.stock_ids[s] for s in fresh]
-		touch_statement_rows(db_table, fresh_ids)
+	# Skipped symbols (fresh / suppressed): bump updated_at so the staleness
+	# clock restarts and legacy NULL stamps migrate to stamped
+	if not force and skipped_symbols:
+		touch_statement_rows(db_table, [ctx.stock_ids[s] for s in skipped_symbols])
 
 	return stats

@@ -4,13 +4,14 @@ from lib.module.printf import printf, level as lv
 import constants.db_tables as dbt
 
 
-def get_stock_industry(stock_id: int) -> str | None:
+def get_stock_sector(stock_id: int) -> str | None:
+	'''Broad peer-group field (GICS convention: stock.sector = broad).'''
 	conn = get_connection()
 	cursor = conn.cursor()
 
 	try:
 		cursor.execute(
-			sql.SQL("SELECT industry FROM {} WHERE id = %s").format(sql.Identifier(dbt.stock)),
+			sql.SQL("SELECT sector FROM {} WHERE id = %s").format(sql.Identifier(dbt.stock)),
 			(stock_id,)
 		)
 		result = cursor.fetchone()
@@ -24,19 +25,19 @@ def get_stock_industry(stock_id: int) -> str | None:
 		return None
 
 
-def get_stock_ids_within_industry(industry: str):
+def get_stock_ids_within_sector(sector: str):
 	conn = get_connection()
 	cursor = conn.cursor()
 
 	try:
 		cursor.execute(
-			sql.SQL("SELECT id FROM {} WHERE industry = %s").format(sql.Identifier(dbt.stock)),
-			(industry,)
+			sql.SQL("SELECT id FROM {} WHERE sector = %s").format(sql.Identifier(dbt.stock)),
+			(sector,)
 		)
 		result = cursor.fetchall()
 
 		if not result:
-			raise ValueError(f"Stock ({industry}) isn't in database")
+			raise ValueError(f"Stock ({sector}) isn't in database")
 
 		return [row[0] for row in result]
 	except Exception as e:

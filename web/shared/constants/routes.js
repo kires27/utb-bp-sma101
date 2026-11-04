@@ -45,7 +45,7 @@ export const API = {
 	stocks: {
 		list: (limit) => `/api/stock/stock-list/${limit}`,
 		get_stock: (symbol) => `/api/stock/${symbol}`,
-		get_metric: (symbol) => `/api/stock/metric/${symbol}`,
+		get_quote: (symbol) => `/api/stock/quote/${symbol}`,
 		get_financials: (symbol) => `/api/stock/financial-analysis/${symbol}`,
 		get_events: (symbol) => `/api/stock/events/${symbol}`,
 		get_intrinsic_value: (symbol) => `/api/stock/intrinsic-value/${symbol}`,

@@ -25,7 +25,7 @@ jobs:
       - name: Run script
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python src/main.py --run calendar
+        run: python src/main.py --phases calendar
 
       - name: Upload run summary
         if: always()

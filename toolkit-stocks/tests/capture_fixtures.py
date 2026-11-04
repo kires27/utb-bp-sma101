@@ -80,7 +80,7 @@ def capture_defeatbeta():
 
 def capture_yfinance_symbol(source, sym: str, intl: bool):
 	from lib.transforms import (
-		build_price_rows, build_overview_row, build_metric_row,
+		build_price_rows, build_overview_row, build_quote_row,
 	)
 	from lib.transforms.statements import build_statement_rows
 
@@ -97,7 +97,7 @@ def capture_yfinance_symbol(source, sym: str, intl: bool):
 		sym, 1, history["price_rows"], None
 	)))
 	write(expected_path(base / "info.json"), strip_volatile(build_overview_row(sym, info, None, {}, info)))
-	write(expected_path(base / "quote.json"), strip_volatile(build_metric_row(sym, 1, quote)))
+	write(expected_path(base / "quote.json"), strip_volatile(build_quote_row(sym, 1, quote)))
 	write(base / "quote.json", quote)
 
 	for kind, name in [("income_statement", "income"), ("balance_sheet", "balance"), ("cash_flow", "cash")]:
@@ -107,6 +107,13 @@ def capture_yfinance_symbol(source, sym: str, intl: bool):
 			continue
 		write(base / f"statements_{name}.json", grouped)
 		write(expected_path(base / f"statements_{name}.json"), strip_volatile(build_statement_rows(sym, 1, grouped, "annual", kind)))
+
+		qgrouped = source.statements_payload(sym, kind, "quarterly")
+		if qgrouped is None:
+			print(f"{sym}: no quarterly {kind}, skipping")
+			continue
+		write(base / f"statements_{name}_quarterly.json", qgrouped)
+		write(expected_path(base / f"statements_{name}_quarterly.json"), strip_volatile(build_statement_rows(sym, 1, qgrouped, "quarterly", kind)))
 
 
 def main():
@@ -125,7 +132,7 @@ def main():
 def _recompute_expected():
 	from lib.transforms import (
 		build_price_rows, build_dividend_rows, build_split_rows,
-		build_overview_row, build_metric_row, build_statement_rows,
+		build_overview_row, build_quote_row, build_statement_rows,
 	)
 	from lib.transforms.statements import group_statement_records
 
@@ -155,7 +162,7 @@ def _recompute_expected():
 				info = json.load(open(sym_dir / "info.json"))
 				write(expected_path(sym_dir / "info.json"), strip_volatile(build_overview_row(sym, info, None, {}, info)))
 				quote = json.load(open(sym_dir / "quote.json"))
-				write(expected_path(sym_dir / "quote.json"), strip_volatile(build_metric_row(sym, 1, quote)))
+				write(expected_path(sym_dir / "quote.json"), strip_volatile(build_quote_row(sym, 1, quote)))
 				for name in ["income", "balance", "cash"]:
 					p = sym_dir / f"statements_{name}.json"
 					if not p.exists():

@@ -14,6 +14,8 @@
 - DefeatBeta (US) + yfinance (non-US); yahooquery deleted. Failover: `FailoverSource(primary, fallback, validate)`, prices all-or-nothing per full history. DefeatBeta license ODC-BY: thesis OK, not commercial. **REMOVED 2026-11-01 (PLAN-rewrite-toolkit.md M4): DefeatBeta + FailoverSource + partition_symbols + exchange heuristics deleted; yfinance is now the single source for all regions. DefeatBeta license no longer relevant.**
 - Intrinsic value: Excel sheet canonical: NFCF = mean of 3 newest FCFs; 5y AGR; terminal = peer/industry P/FCF; MoS ×0.75.
 - Deps: yfinance 1.7.0, curl_cffi 0.16.3, pandas 3.1, numpy 2.5.4, PyYAML 6.0.3 (screener config); duckdb no longer in requirements (defeatbeta-api removed with DefeatBeta).
+- FA reads market data from `stock_quote` (2026-11-02, `PLAN-fa-metric-price.md`): fa phase does one bulk read via `get_metric_quotes(stock_ids)` → `{stock_price, market_cap}`, zero yfinance calls in fa. Missing row / null price/cap = skip + error naming field; no fallback fetch (user decision). **Same day, superseded: `stock_quote.dividend_yield` column DROPPED (user: redundant, `stock_financial_analysis.dividend_yield` already stores it). FA now computes yield itself: `get_ttm_dividends(stock_id)` = SUM over `stock_dividend` last 365d ÷ current price, `fac.dividend_yield(ttm, price)` → None for non-payers. Quote dicts/normalizers carry no yield anymore (quotes_batch + yfinance_source cleaned).**
+- fqs phase (2026-11-02): quality score split from fa into own phase, runs strictly after `fa`. `build_financial_analysis` must NEVER write `quality_score` key (upsert would NULL it and wipe prior scores). `run_quality_score` loops targets, `build_quality_score` per symbol, one upsert `{quality_score, median_comparison}`. Peer data now fresh across the whole run (old code scored each symbol right after its own row write). Independently runnable for score-only reruns.
 
 # Gotchas & Lessons
 - Kire (`kwpzvlymmaczaixtjdbu`) = live SMA DB (web target); halite = older copy, do not write. Web writes need `SUPABASE_SECRET_KEY` → `useSupabaseAdmin`.
@@ -29,6 +31,6 @@
 - toolkit-stocks: rewrite-toolkit M1-M7 changes UNCOMMITTED (batched quotes, DefeatBeta/failover removal, threaded executor, backfill+screener, CLI cutover, workflows, docs). Commit after soak starts green.
 - M7 soak (24-48h at ~200 stocks) in progress, then expansion to 4000 in screener batches (~500/run, soak between batches).
 - Quality score currency bug (`PLAN-quality-score-currency.md`): drop EPS/revenues-per-share from GROUPS, redistribute weights, re-run `--fa`.
-- `get_stock_industry()` tuple bug FIXED 2026-11-01 (`sql.py`): now returns `result[0]` string; `get_stock_ids_within_industry()` returns flat id list (not 1-tuples). Quality score peers work.
+- Sector/industry switched to standard GICS convention 2026-11-04: `stock.sector` = broad, `stock.industry` = fine-grained. DB values swapped; `get_all_medians` RPC now takes `p_stock_sector` + filters `s.sector`; quality score uses `get_stock_sector()`/`get_stock_ids_within_sector()`; overview transform maps 1:1 (legacy swap removed). Stored `quality_score` still valid (peer pool granularity unchanged: broad).
 - Full-universe run (`PLAN-full-universe-run.md`): ~4,621 symbols, record timing.
 - Regenerate `web/app/types/database.types.ts` (still declares adj_close).

@@ -17,6 +17,7 @@ import yaml
 from yfinance import EquityQuery, screener
 
 import constants.db_tables as dbt
+from lib.functions.netstats import incr_yf
 from lib.module.printf import printf, level as lv
 from lib.supabase.sql_functions import get_symbols, RowFlusher
 
@@ -158,6 +159,7 @@ def screen_all(query: EquityQuery) -> list[dict]:
 	quotes: list[dict] = []
 	offset = 0
 	while True:
+		incr_yf()
 		page = screener.screen(query, size=PAGE_SIZE, offset=offset)
 		page_quotes = page.get("quotes") or []
 		quotes.extend(page_quotes)

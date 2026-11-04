@@ -25,4 +25,4 @@ jobs:
       - name: Run hourly prices
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python src/main.py --run hourly --symbols db
+        run: python src/main.py --phases quote --symbols db

@@ -9,7 +9,8 @@ export default defineEventHandler(async (event) => {
 		throw createError({ statusCode: 400, statusMessage: 'Missing stock id' })
 	}
 
-	const { id, industry } = await getStock(client, symbol, ["id", "industry"])
+	// Peer grouping uses the broad field (stock.sector) per GICS convention
+	const { id, sector } = await getStock(client, symbol, ["id", "sector"])
 	if (!id) {
 		throw createError({ statusCode: 400, statusMessage: 'Invalid stock symbol' })
 	}
@@ -29,7 +30,7 @@ export default defineEventHandler(async (event) => {
 		.rpc('get_all_medians', {
 			p_table_fa: 'stock_financial_analysis',
 			p_table_stock: 'stock',
-			p_stock_industry: industry
+			p_stock_sector: sector
 		})
 
 	if (medianError) throw createError({ statusCode: 500, statusMessage: medianError.message })

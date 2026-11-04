@@ -33,10 +33,10 @@ def test_yf_snake_case_shape():
 	assert row["website"] == "apple.com"
 
 
-def test_sector_industry_swapped_on_purpose():
+def test_sector_industry_standard_mapping():
 	row = _row()
-	assert row["sector"] == "Consumer Electronics"	# profile.industry
-	assert row["industry"] == "Technology"	# profile.sector
+	assert row["sector"] == "Technology"	# broad field (GICS convention)
+	assert row["industry"] == "Consumer Electronics"	# fine-grained field
 
 
 def test_db_meta_wins_over_profile():

@@ -1,6 +1,7 @@
 import time
 import traceback
 
+from lib.functions.netstats import incr_yf
 from lib.module.printf import printf, level as lv
 
 
@@ -18,7 +19,7 @@ class QuotesBatchSource:
 	limiter counts requests, not payload size, so batching is ~free.
 
 	Returns the same normalized quote dict as YFinanceSource.quote() plus
-	extra gating fields (market_state, currency, volume) the hourly phase
+	extra gating fields (market_state, currency, volume) the quote phase
 	uses to skip closed markets. No DB writes.
 	'''
 
@@ -37,6 +38,7 @@ class QuotesBatchSource:
 		import yfinance as yf
 
 		for attempt in range(MAX_RETRIES):
+			incr_yf()
 			try:
 				resp = self._data.get_raw_json(QUOTE_URL, params={"symbols": ",".join(symbols)})
 				return resp.get("quoteResponse", {}).get("result") or []
@@ -68,9 +70,9 @@ class QuotesBatchSource:
 	@staticmethod
 	def _normalize(record: dict) -> dict:
 		'''
-		Raw v7/quote record -> normalized quote dict. Same six contract keys
+		Raw v7/quote record -> normalized quote dict. Same five contract keys
 		as YFinanceSource.quote() (stock_price, market_cap, change, change_pct,
-		regular_market_time, dividend_yield) + gating extras.
+		regular_market_time) + gating extras.
 		'''
 		price = record.get("regularMarketPrice")
 		# Pence-quoted symbols (LSE) report price in GBp; statements are in GBP.
@@ -79,18 +81,13 @@ class QuotesBatchSource:
 		if currency in GBP_STYLE_CURRENCIES and price is not None:
 			price = price / 100
 
-		dividend_yield = record.get("dividendYield")
-		if dividend_yield is not None:
-			dividend_yield = dividend_yield / 100  # percent -> fraction
-
 		return {
 			"stock_price": price,
 			"market_cap": record.get("marketCap"),
 			"regular_market_change": record.get("regularMarketChange"),
 			"regular_market_change_percent": record.get("regularMarketChangePercent"),
 			"regular_market_time": record.get("regularMarketTime"),
-			"dividend_yield": dividend_yield,
-			# gating extras (not part of build_metric_row contract)
+			# gating extras (not part of build_quote_row contract)
 			"market_state": record.get("marketState"),
 			"currency": currency,
 			"volume": record.get("regularMarketVolume"),

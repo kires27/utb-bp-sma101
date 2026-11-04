@@ -9,11 +9,10 @@ from lib.functions.stats import new_phase
 
 
 class Args:
-	def __init__(self, prices=False, splits=False, dividends=False, metrics=False, fa=False, force=False):
+	def __init__(self, prices=False, splits=False, dividends=False, fa=False, force=False):
 		self.prices = prices
 		self.splits = splits
 		self.dividends = dividends
-		self.metrics = metrics
 		self.fa = fa
 		self.force = force
 

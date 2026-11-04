@@ -123,7 +123,7 @@ def get_latest_dates(table: str, stock_ids: list[int]) -> dict[int, dtdate]:
 
 
 def get_latest_market_times(stock_ids: list[int]) -> dict[int, dt_datetime]:
-	'''stock_id -> newest stored regular_market_time (tz-aware) from stock_metric.
+	'''stock_id -> newest stored regular_market_time (tz-aware) from stock_quote.
 	Hourly gating: fetch/write only when the market time is newer than stored.'''
 	conn = get_connection()
 	cursor = conn.cursor()
@@ -134,13 +134,64 @@ def get_latest_market_times(stock_ids: list[int]) -> dict[int, dt_datetime]:
 				SELECT stock_id, regular_market_time
 				FROM {}
 				WHERE stock_id = ANY(%s) AND regular_market_time IS NOT NULL
-			""").format(sql.Identifier(dbt.metric)),
+			""").format(sql.Identifier(dbt.quote)),
 			(stock_ids,)
 		)
 		return {row[0]: row[1] for row in cursor.fetchall()}
 	except Exception as e:
 		printf(f"get_latest_market_times failed: {e}", lv.WARNING)
 		return {}
+
+
+def get_quotes(stock_ids: list[int]) -> dict[int, dict]:
+	'''stock_id -> {stock_price, market_cap} from stock_quote. FA reads live
+	market data from the DB (written by the quote phase) instead of per-symbol
+	yfinance calls. Symbols without a quote row are simply absent.'''
+	if not stock_ids:
+		return {}
+	conn = get_connection()
+	cursor = conn.cursor()
+
+	try:
+		cursor.execute(
+			sql.SQL("""
+				SELECT stock_id, stock_price, market_cap
+				FROM {}
+				WHERE stock_id = ANY(%s)
+			""").format(sql.Identifier(dbt.quote)),
+			(stock_ids,)
+		)
+		return {
+			row[0]: {
+				"stock_price": row[1],
+				"market_cap": row[2],
+			}
+			for row in cursor.fetchall()
+		}
+	except Exception as e:
+		printf(f"get_quotes failed: {e}", lv.WARNING)
+		return {}
+
+
+def get_ttm_dividends(stock_id: int) -> float:
+	'''Sum of split-adjusted dividends paid in the last 365 days (today
+	basis, same basis as prices). 0.0 for non-payers / missing history.'''
+	conn = get_connection()
+	cursor = conn.cursor()
+
+	try:
+		cursor.execute(
+			sql.SQL("""
+				SELECT COALESCE(SUM(dividend), 0)
+				FROM {}
+				WHERE stock_id = %s AND date >= CURRENT_DATE - INTERVAL '365 days'
+			""").format(sql.Identifier(dbt.dividend)),
+			(stock_id,)
+		)
+		return float(cursor.fetchone()[0] or 0.0)
+	except Exception as e:
+		printf(f"get_ttm_dividends failed: {e}", lv.WARNING)
+		return 0.0
 
 
 def get_latest_fiscal_dates(table: str, stock_ids: list[int]) -> dict[int, dtdate]:
@@ -189,6 +240,77 @@ def get_stamped_stock_ids(table: str, stock_ids: list[int]) -> set[int]:
 		return {row[0] for row in cursor.fetchall()}
 	except Exception as e:
 		printf(f"get_stamped_stock_ids failed: {e}", lv.WARNING)
+		return set()
+
+
+def get_quarterly_fetch_ids(statement_tables: list[str], stock_ids: list[int]) -> set[int]:
+	'''stock_ids needing a quarterly statement fetch: stale AND NOT suppressed.
+
+	Stale = today - max(newest fiscal_date across statement_tables) > window;
+	unknown symbols (no rows in any table) count as stale via COALESCE fallback.
+	Suppressed = a known future earnings event sits beyond the lookahead window
+	AND the gap is still < MAX_SUPPRESSION_GAP_DAYS (missing >~2 quarters is
+	never suppressed, so a wrong far-future event cannot hide staleness).
+	'''
+	if not stock_ids:
+		return set()
+
+	from constants.pipeline import (
+		EARNINGS_EVENT_LOOKAHEAD_DAYS,
+		MAX_SUPPRESSION_GAP_DAYS,
+		QUARTERLY_FISCAL_WINDOW_DAYS,
+	)
+
+	conn = get_connection()
+	cursor = conn.cursor()
+
+	try:
+		branches = sql.SQL(" UNION ALL ").join([
+			sql.SQL(
+				"SELECT stock_id, max(fiscal_date) AS newest FROM {} WHERE stock_id = ANY(%s) GROUP BY stock_id"
+			).format(sql.Identifier(table))
+			for table in statement_tables
+		])
+		cursor.execute(
+			sql.SQL("""
+				WITH ids AS (
+					SELECT unnest(%s::int[]) AS stock_id
+				),
+				latest AS (
+					{branches}
+				),
+				n AS (
+					SELECT ids.stock_id, max(l.newest) AS newest_fiscal_date
+					FROM ids LEFT JOIN latest l ON l.stock_id = ids.stock_id
+					GROUP BY ids.stock_id
+				),
+				ev AS (
+					SELECT stock_id, min(event_datetime) AS next_event
+					FROM {cal}
+					WHERE event_type = 'earnings'
+						AND event_datetime > now() + make_interval(days => %s)
+						AND stock_id = ANY(%s)
+					GROUP BY stock_id
+				)
+				SELECT n.stock_id
+				FROM n
+				LEFT JOIN ev USING (stock_id)
+				WHERE (now()::date - COALESCE(n.newest_fiscal_date, date '1900-01-01')) > %s
+					AND (ev.next_event IS NULL
+						OR (now()::date - COALESCE(n.newest_fiscal_date, date '1900-01-01')) >= %s)
+			""").format(
+				branches=branches,
+				cal=sql.Identifier(dbt.economic_calendar),
+			),
+			list(stock_ids) * len(statement_tables) + (
+				EARNINGS_EVENT_LOOKAHEAD_DAYS, list(stock_ids),
+				QUARTERLY_FISCAL_WINDOW_DAYS, MAX_SUPPRESSION_GAP_DAYS,
+			),
+		)
+		return {row[0] for row in cursor.fetchall()}
+	except Exception as err:
+		tb = traceback.extract_tb(err.__traceback__)[-1]
+		printf(f"get_quarterly_fetch_ids: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
 		return set()
 
 

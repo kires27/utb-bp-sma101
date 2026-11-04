@@ -14,9 +14,9 @@ def build_overview_row(symbol: str, profile: dict, officers: list[dict], db_meta
 	keeps old values alive on upsert (omitted keys are not updated).
 	yf_info: optional yfinance info dict used as fallback for missing identity fields.
 
-	NOTE: DB sector/industry columns are intentionally swapped
-	(stock.sector stores the fine-grained industry, stock.industry the sector)
-	matching the legacy yahooquery pipeline convention.
+	NOTE: Standard GICS convention — stock.sector stores the broad sector
+	(Technology, Healthcare, ...), stock.industry the fine-grained industry
+	(Consumer Electronics, Banks - Diversified, ...).
 	'''
 	try:
 		row = {
@@ -24,8 +24,8 @@ def build_overview_row(symbol: str, profile: dict, officers: list[dict], db_meta
 			"address": profile.get("address") or profile.get("address1"),
 			"description": profile.get("long_business_summary") or profile.get("longBusinessSummary"),
 			"employees": profile.get("full_time_employees") or profile.get("fullTimeEmployees"),
-			"sector": profile.get("industry"),	# sector x industry -> switched on purpose
-			"industry": profile.get("sector"),	# sector x industry -> switched on purpose
+			"sector": profile.get("sector"),
+			"industry": profile.get("industry"),
 			"key_executives": json.dumps(officers) if officers is not None else json.dumps(
 				(profile.get("companyOfficers") or []) if profile.get("companyOfficers") is not None else (yf_info or {}).get("companyOfficers", [])
 			),

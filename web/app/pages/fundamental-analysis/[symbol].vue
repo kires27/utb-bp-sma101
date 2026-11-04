@@ -19,12 +19,12 @@ function openWatchlistMenu() {
 const { data: stockDataRaw, error: stockError } = await useAsyncData(
 	() => `stock-header-${symbol.value}`,
 	async () => {
-		const [basic, metric] = await Promise.all([
+		const [basic, quote] = await Promise.all([
 			$fetch(API.stocks.get_stock(symbol.value)),
-			$fetch(API.stocks.get_metric(symbol.value)),
+			$fetch(API.stocks.get_quote(symbol.value)),
 		])
 
-		return { basic, metric }
+		return { basic, quote }
 	},
 	{ watch: [symbol], },
 )
@@ -50,29 +50,29 @@ watch(stockError, (err) => {
 
 const stockData = computed(() => {
 	const basic = stockDataRaw.value?.basic ?? {}
-	const metric = stockDataRaw.value?.metric ?? {}
+	const quote = stockDataRaw.value?.quote ?? {}
 
 	return {
 		ticker: basic.symbol ?? symbol.value,
 		name: basic.name ?? "",
-		price: metric.stock_price ?? "—",
-		change: Number(metric.regular_market_change_percent ?? 0).toFixed(2) + "%",
-		changeAmount: Number(metric.regular_market_change ?? 0).toFixed(2) + "$",
-		positive: Number(metric.regular_market_change ?? 0) >= 0,
+		price: quote.stock_price ?? "—",
+		change: Number(quote.regular_market_change_percent ?? 0).toFixed(2) + "%",
+		changeAmount: Number(quote.regular_market_change ?? 0).toFixed(2) + "$",
+		positive: Number(quote.regular_market_change ?? 0) >= 0,
 		sector: basic.sector ?? "",
 		exchange: basic.exchange ?? "",
-		currency: metric.currency ?? "USD",
+		currency: quote.currency ?? "USD",
 	}
 })
 
 // ---- live price freshness (client-only: SSR/hydration quirk per AGENTS.md) ----
 const isHydrated = ref(false)
-const isStale = computed(() => Boolean(stockDataRaw.value?.metric?.stale))
+const isStale = computed(() => Boolean(stockDataRaw.value?.quote?.stale))
 const updatedAt = ref(null) // Date of last known regular_market_time
 const ageLabel = ref("")
 
 function syncUpdatedAt() {
-	const ts = stockDataRaw.value?.metric?.regular_market_time
+	const ts = stockDataRaw.value?.quote?.regular_market_time
 	updatedAt.value = ts ? new Date(ts) : null
 	tickAge()
 }
@@ -92,10 +92,10 @@ let heartbeat = null
 let ageTicker = null
 let channel = null
 
-async function refreshMetric() {
+async function refreshQuote() {
 	try {
-		const fresh = await $fetch(API.stocks.get_metric(symbol.value))
-		if (fresh && !fresh.stale) stockDataRaw.value = { ...stockDataRaw.value, metric: fresh }
+		const fresh = await $fetch(API.stocks.get_quote(symbol.value))
+		if (fresh && !fresh.stale) stockDataRaw.value = { ...stockDataRaw.value, quote: fresh }
 		syncUpdatedAt()
 	} catch {
 		// network hiccup — keep current data, next beat retries
@@ -107,7 +107,7 @@ onMounted(async () => {
 	syncUpdatedAt()
 
 	// heartbeat: keeps interest alive + refreshes while user stares at page
-	heartbeat = setInterval(refreshMetric, 60_000)
+	heartbeat = setInterval(refreshQuote, 60_000)
 	ageTicker = setInterval(tickAge, 10_000)
 
 	await rekeyChannel()
@@ -131,19 +131,19 @@ async function rekeyChannel() {
 	// realtime push: any poller/other-user refresh lands here without polling
 	await supabase.realtime.setAuth()
 	channel = supabase
-		.channel(`stock-metric-${symbol.value}`)
+		.channel(`stock-quote-${symbol.value}`)
 		.on(
 			"postgres_changes",
 			{
 				event: "UPDATE",
 				schema: "public",
-				table: "stock_metric",
+				table: "stock_quote",
 				filter: `stock_id=eq.${stockId.value}`,
 			},
 			(payload) => {
 				stockDataRaw.value = {
 					...stockDataRaw.value,
-					metric: { ...stockDataRaw.value?.metric, ...payload.new },
+					quote: { ...stockDataRaw.value?.quote, ...payload.new },
 				}
 				syncUpdatedAt()
 			}

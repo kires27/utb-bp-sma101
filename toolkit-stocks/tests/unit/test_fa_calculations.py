@@ -64,8 +64,11 @@ def test_pe_and_pb_ratio():
 
 
 def test_dividend_yield_percent_scaling():
-	assert dividend_yield(0.0055) == 0.55
-	assert dividend_yield(None) is None
+	assert dividend_yield(1.02, 180.0) == 0.5667
+	assert dividend_yield(0.0, 100.0) is None  # non-payer -> NULL, not 0
+	assert dividend_yield(None, 100.0) is None
+	assert dividend_yield(1.02, None) is None
+	assert dividend_yield(1.02, 0) is None
 
 
 def test_division_by_zero_returns_none():

@@ -25,7 +25,7 @@ jobs:
       - name: Run script
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python src/main.py --run daily --symbols db
+        run: python src/main.py --phases overview,statements,prices,dividends,splits,fa,fqs --symbols db
 
       - name: Upload run summary
         if: always()
@@ -41,7 +41,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           if [ -f run_summary.txt ]; then
-            python src/verify.py --prices-metrics --log run_summary.txt
+            python src/verify.py --prices-quotes --log run_summary.txt
           else
-            python src/verify.py --prices-metrics
+            python src/verify.py --prices-quotes
           fi

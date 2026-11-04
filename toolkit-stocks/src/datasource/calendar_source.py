@@ -14,6 +14,7 @@ avoided entirely. No DB writes.
 import time
 import traceback
 
+from lib.functions.netstats import incr_yf
 from lib.module.printf import printf, level as lv
 
 
@@ -58,6 +59,7 @@ class CalendarSource:
 		}
 
 		for attempt in range(MAX_RETRIES):
+			incr_yf()
 			try:
 				resp = self._data.post(CALENDAR_URL, params={"lang": "en-US"}, body=body)
 				json_data = resp.json()

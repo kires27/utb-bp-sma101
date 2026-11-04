@@ -13,7 +13,7 @@ import pytest
 
 from lib.transforms import (
 	build_price_rows, build_dividend_rows, build_split_rows,
-	build_overview_row, build_metric_row, build_statement_rows,
+	build_overview_row, build_quote_row, build_statement_rows,
 )
 from lib.transforms.statements import group_statement_records
 from conftest import FIXTURES_DIR, expected_path
@@ -100,7 +100,7 @@ class TestYfinanceGolden:
 		_ = _assert_expected([row], expected_path(sym_dir / "info.json"))
 
 	def test_quote(self, sym_dir):
-		row = build_metric_row(sym_dir.name.upper(), 1, _load(sym_dir / "quote.json"))
+		row = build_quote_row(sym_dir.name.upper(), 1, _load(sym_dir / "quote.json"))
 		_ = _assert_expected([row], expected_path(sym_dir / "quote.json"))
 
 	@pytest.mark.parametrize("name", ["income", "balance", "cash"])
@@ -109,4 +109,12 @@ class TestYfinanceGolden:
 		if not path.exists():
 			pytest.skip(f"no {name} fixture")
 		rows = build_statement_rows(sym_dir.name.upper(), 1, _load(path), "annual", STMT_FINANCE_TYPE[name])
+		_ = _assert_expected(rows, expected_path(path))
+
+	@pytest.mark.parametrize("name", ["income", "balance", "cash"])
+	def test_statements_quarterly(self, sym_dir, name):
+		path = sym_dir / f"statements_{name}_quarterly.json"
+		if not path.exists():
+			pytest.skip(f"no {name} quarterly fixture - run tests/capture_fixtures.py")
+		rows = build_statement_rows(sym_dir.name.upper(), 1, _load(path), "quarterly", STMT_FINANCE_TYPE[name])
 		_ = _assert_expected(rows, expected_path(path))

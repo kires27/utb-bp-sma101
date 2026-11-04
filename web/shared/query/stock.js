@@ -19,11 +19,11 @@ export async function getStock(client, symbol, columns = ["*"]) {
 	return data
 }
 
-export async function getMetric(supabase, stockId, selectColumns = ["*"]) {
+export async function getQuote(supabase, stockId, selectColumns = ["*"]) {
 	const selectClause = selectColumns.join(',')
 
 	const { data, error } = await supabase
-		.from('stock_metric')
+		.from('stock_quote')
 		.select(selectClause)
 		.eq('stock_id', stockId)
 		.limit(1);

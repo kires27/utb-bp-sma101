@@ -40,7 +40,7 @@ Body:
 
 ## Decision: where `priceToFcf` comes from
 
-- **A — quick:** endpoint computes on the fly (median of industry peers' `market_cap / free_cash_flow`, both in DB via `stock_metric` + statements). No pipeline change; heavier query per request.
+- **A — quick:** endpoint computes on the fly (median of industry peers' `market_cap / free_cash_flow`, both in DB via `stock_quote` + statements). No pipeline change; heavier query per request.
 - **B — pipeline (recommended):** add `price_to_fcf` metric column to FA pipeline (already computes industry medians — natural fit); endpoint reads the median. Needs one `--fa` run to populate.
 
 ## Tests

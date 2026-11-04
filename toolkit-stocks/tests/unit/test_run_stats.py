@@ -32,30 +32,36 @@ def test_count_symbol_failed_capped_at_20():
 
 
 def test_summary_line_without_failures():
-	stats = new_phase("metrics", 100)
+	stats = new_phase("quote", 100)
 	stats["symbols_ok"] = 98
 	stats["rows_written"] = 98
-	assert summary_line(stats) == "PHASE metrics total=100 ok=98 rows=98 skipped_fresh=0"
+	assert summary_line(stats) == "PHASE quote total=100 ok=98 rows=98 skipped_fresh=0"
 
 
 def test_summary_line_with_failures():
-	stats = new_phase("metrics", 100)
+	stats = new_phase("quote", 100)
 	stats["symbols_ok"] = 98
 	stats["failed_symbols"] = ["BAD1", "BAD2"]
 	line = summary_line(stats)
-	assert line.startswith("PHASE metrics total=100 ok=98 rows=0")
+	assert line.startswith("PHASE quote total=100 ok=98 rows=0")
 	assert "first=BAD1,BAD2" in line
 
 
 def test_parse_phase_lines_roundtrip():
 	lines = [
 		"PHASE market_data total=100 ok=98 rows=1234 first=BAD1",
-		"PHASE metrics total=100 ok=100 rows=100",
+		"PHASE quote total=100 ok=100 rows=100",
 		"[2026-10-24 08:00:00] [INFO] noise line",
 	]
 	stats = parse_phase_lines("\n".join(lines))
-	assert stats["market_data"] == {"symbols_total": 100, "symbols_ok": 98, "rows_written": 1234}
-	assert stats["metrics"] == {"symbols_total": 100, "symbols_ok": 100, "rows_written": 100}
+	assert stats["market_data"] == {
+		"symbols_total": 100, "symbols_ok": 98, "rows_written": 1234,
+		"failed_symbols": ["BAD1"],
+	}
+	assert stats["quote"] == {
+		"symbols_total": 100, "symbols_ok": 100, "rows_written": 100,
+		"failed_symbols": [],
+	}
 	assert len(stats) == 2
 
 

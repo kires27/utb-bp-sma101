@@ -88,12 +88,12 @@ async function fetchViaChart(symbol) {
 }
 
 /**
- * Map a fresh quote onto the stock_metric column shape.
+ * Map a fresh quote onto the stock_quote column shape.
  * Change fields are derived vs previousClose; percent is raw 0-1 (DB convention).
  * @param {object} quote - fetchQuote result
  * @returns {object} patch for upsertPriceRow
  */
-export function quoteToMetricPatch(quote) {
+export function buildQuotePatch(quote) {
 	const change =
 		quote.previousClose != null ? quote.price - quote.previousClose : null;
 	const changePercent =

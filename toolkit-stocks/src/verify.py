@@ -3,11 +3,11 @@
 Run as a separate CI step after the pipeline. Exits non-zero on any failed check
 so the workflow goes red and GitHub sends the failure email.
 
-Usage: python src/verify.py --prices-metrics | --fa
+Usage: python src/verify.py --prices-quotes | --fa
 """
 import argparse
 import sys
-from datetime import date
+from datetime import date, datetime
 
 from lib.module.printf import printf, level as lv
 from lib.supabase.init import get_connection
@@ -17,9 +17,15 @@ MAX_PRICE_AGE_DAYS = 4		# EOD data, weekends/holidays tolerated
 MAX_FA_AGE_DAYS = 40		# annual data, quarterly refresh cadence tolerated
 MAX_FAILED_RATIO = 0.02		# >2% of symbols failed -> suspicious
 MIN_ROWS = 1				# a healthy run always writes something
+# Phases whose 0-row runs are healthy: quote is marketState-gated (closed
+# markets write nothing; hourly cron keeps freshness), calendar writes only
+# when new events appear.
+MIN_ROWS_PHASE_EXEMPT = {"quote", "calendar"}
 
 
 def days_since(d: date) -> int:
+	if isinstance(d, datetime):
+		d = d.date()	# timestamptz (maintenance_update) arrives as datetime
 	return (date.today() - d).days
 
 
@@ -58,10 +64,12 @@ def parse_phase_lines(log_text: str) -> dict[str, dict]:
 			continue
 		parts = line.split()
 		try:
+			first_part = next((p for p in parts[5:] if p.startswith("first=")), None)
 			entry = {
 				"symbols_total": int(parts[2].split("=")[1]),
 				"symbols_ok": int(parts[3].split("=")[1]),
 				"rows_written": int(parts[4].split("=")[1]),
+				"failed_symbols": first_part.removeprefix("first=").split(",") if first_part else [],
 			}
 		except (IndexError, ValueError):
 			continue
@@ -74,8 +82,8 @@ def run(mode: str, log_path: str | None) -> int:
 	cursor = conn.cursor()
 	failures = []
 
-	if mode == "--prices-metrics":
-		for table in (dbt.historical_price, dbt.metric):
+	if mode == "--prices-quotes":
+		for table in (dbt.historical_price, dbt.quote):
 			ok, msg = check_freshness(cursor, table, "date" if table == dbt.historical_price else "maintenance_update", MAX_PRICE_AGE_DAYS)
 			printf(msg, lv.INFO if ok else lv.ERROR)
 			if not ok:
@@ -99,7 +107,10 @@ def run(mode: str, log_path: str | None) -> int:
 			if not ok:
 				failures.append(msg)
 			rows = stats.get("rows_written", 0)
-			if rows < MIN_ROWS:
+			# Quarterly statement phases legitimately write 0 rows on days where
+			# every symbol is fresh or suppressed by an upcoming earnings date.
+			# quote/calendar are exempt (marketState-gated / episodic).
+			if rows < MIN_ROWS and name not in MIN_ROWS_PHASE_EXEMPT and not name.endswith("_quarterly"):
 				failures.append(f"{name}: rows_written={rows} below minimum {MIN_ROWS}")
 
 	if failures:
@@ -113,7 +124,7 @@ def run(mode: str, log_path: str | None) -> int:
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description="Post-run pipeline verification")
-	parser.add_argument("mode", choices=["--prices-metrics", "--fa"])
+	parser.add_argument("mode", choices=["--prices-quotes", "--fa"])
 	parser.add_argument("--log", help="path to pipeline log file with PHASE summary lines")
 	args = parser.parse_args()
 	sys.exit(run(args.mode, args.log))

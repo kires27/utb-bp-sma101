@@ -156,13 +156,16 @@ def pb_ratio(market_cap: float, total_equity: float) -> float | None:
 	return _safe(market_cap, total_equity)
 
 
-def dividend_yield(dividend_yield) -> float | None:
-	"""get dividend yield from yahoo finance and check whether its None type"""
+def dividend_yield(ttm_dividends, price) -> float | None:
+	"""Trailing yield: TTM dividends per share (stock_dividend, split-adjusted)
+	over current price. Fraction 0-1 in, percent out (fa table stores x100).
+	None for non-payers (ttm = 0) so NULL, not 0, lands in the fa table."""
 	try:
-		value = _to_float(dividend_yield)
-		if value is None:
+		ttm = _to_float(ttm_dividends)
+		p = _to_float(price)
+		if not ttm or not p:
 			return None
-		return round(value * 100, 4)
+		return round(ttm / p * 100, 4)
 	except Exception as error:
 		tb = traceback.extract_tb(error.__traceback__)[-1]
 		printf(f"{error} (File '{tb.filename}', line {tb.lineno})", lv.WARNING)

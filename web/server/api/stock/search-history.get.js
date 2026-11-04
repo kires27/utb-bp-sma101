@@ -21,14 +21,14 @@ export default defineEventHandler(async (event) => {
 	const priceMap = new Map()
 
 	if (ids.length) {
-		const { data: metrics, error: metricErr } = await client
-			.from('stock_metric')
+		const { data: quotes, error: quoteErr } = await client
+			.from('stock_quote')
 			.select('stock_id, stock_price')
 			.in('stock_id', ids)
 
-		if (!metricErr) {
-			for (const m of metrics) {
-				priceMap.set(m.stock_id, m.stock_price)
+		if (!quoteErr) {
+			for (const q of quotes) {
+				priceMap.set(q.stock_id, q.stock_price)
 			}
 		}
 	}

@@ -1,8 +1,8 @@
 import { supabaseClientAuth, useSupabaseAdmin } from '~~/server/utils/supabase/auth';
 
-import { getStock, getMetric } from "#shared/query/stock";
-import { getPriceRow, upsertPriceRow, touchSymbolActivity, isPriceStale } from "#shared/query/price";
-import { fetchQuote, quoteToMetricPatch } from '~~/server/utils/stock/priceRefresh';
+import { getStock, getQuote } from "#shared/query/stock";
+import { getPriceRow, upsertPriceRow, isPriceStale } from "#shared/query/price";
+import { fetchQuote, buildQuotePatch } from '~~/server/utils/stock/priceRefresh';
 
 const PRICE_MAX_AGE_MS = 180_000; // 3 min — the throttle into Yahoo
 const RETRY_BACKOFF_MS = 10 * 60_000; // after a failed fetch, wait 10 min before retrying
@@ -29,12 +29,7 @@ export default defineEventHandler(async (event) => {
 
 	const stock = await getStock(client, symbol, ["id", "symbol"]);
 	const id = stock.id;
-	let data = await getMetric(client, id, columns);
-
-	// interest registry — fire-and-forget, never blocks or fails the request
-	touchSymbolActivity(useSupabaseAdmin(), stock.symbol).catch((err) =>
-		console.warn(`[metric] symbol_activity touch failed: ${err.message}`)
-	);
+	let data = await getQuote(client, id, columns);
 
 	// staleness check only against full row (selected columns may omit timestamp)
 	const priceRow = data
@@ -75,7 +70,7 @@ async function refreshPrice({ stockId, symbol, current, columns }) {
 
 		if (!quote) {
 			// NEVER cache failures, NEVER delete the old row — serve stale
-			console.warn(`[metric] yahoo refresh failed for ${symbol}, serving stale`);
+			console.warn(`[quote] yahoo refresh failed for ${symbol}, serving stale`);
 			if (current) return { ...current, stale: true };
 			throw createError({
 				statusCode: 502,
@@ -84,9 +79,9 @@ async function refreshPrice({ stockId, symbol, current, columns }) {
 		}
 
 		try {
-			await upsertPriceRow(useSupabaseAdmin(), stockId, quoteToMetricPatch(quote));
+			await upsertPriceRow(useSupabaseAdmin(), stockId, buildQuotePatch(quote));
 		} catch (err) {
-			console.warn(`[metric] price upsert failed for ${symbol}: ${err.message}`);
+			console.warn(`[quote] price upsert failed for ${symbol}: ${err.message}`);
 			return { ...current, stale: true };
 		}
 
