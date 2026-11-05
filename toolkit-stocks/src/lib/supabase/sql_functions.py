@@ -445,8 +445,6 @@ def get_statements_by_stock(stock_id: int, table: str, limit: int = 5) -> list[d
 
 	if not rows:
 		raise ValueError(f"{table} statement is empty")
-		# printf("No data fetched from database", lv.ERROR)
-		return []
 
 	columns = [desc[0] for desc in cursor.description]
 	return [dict(zip(columns, row)) for row in rows]
