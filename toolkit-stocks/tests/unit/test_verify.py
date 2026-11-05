@@ -32,6 +32,39 @@ def test_check_failed_ratio_over_threshold():
 	assert not ok	# 10% failed > 2% limit
 
 
+def test_check_failed_ratio_fresh_skips_not_failures():
+	# skipped_fresh symbols fetched nothing (data already current); they are
+	# not failures. Regression: 100 skips looked like 100% failure.
+	ok, msg = check_failed_ratio({
+		"symbols_total": 100, "symbols_ok": 0, "skipped_fresh": 100,
+	})
+	assert ok
+	assert "failed=0" in msg
+
+
+def test_check_failed_ratio_skips_counted_separately():
+	# 98 ok + 2 fresh skips = 0 real failures.
+	ok, msg = check_failed_ratio({
+		"symbols_total": 100, "symbols_ok": 98, "skipped_fresh": 2,
+	})
+	assert ok
+	assert "failed=0" in msg
+	# 96 ok + 1 skip + 3 real failures = 3% > 2% limit.
+	ok, _ = check_failed_ratio({
+		"symbols_total": 100, "symbols_ok": 96, "skipped_fresh": 1,
+		"failed_symbols": ["BAD1", "BAD2", "BAD3"],
+	})
+	assert not ok
+
+
+def test_check_failed_ratio_all_skipped_lists_no_failures():
+	ok, msg = check_failed_ratio({
+		"symbols_total": 198, "symbols_ok": 0, "skipped_fresh": 198,
+	})
+	assert ok
+	assert "skipped_fresh=198" in msg
+
+
 def test_check_failed_ratio_at_threshold():
 	total, failed = 50, 1
 	ok, _ = check_failed_ratio({"symbols_total": total, "symbols_ok": total - failed})
@@ -67,8 +100,38 @@ def test_parse_phase_lines_full_format():
 			"symbols_total": 4000,
 			"symbols_ok": 3990,
 			"rows_written": 3990,
+			"skipped_fresh": 0,
+			"skipped_no_q": 0,
 			"failed_symbols": ["BAD1", "BAD2"],
 		}
+	}
+
+
+def test_parse_phase_lines_skips_fresh_value():
+	stats = parse_phase_lines(
+		"PHASE balance_sheet total=198 ok=0 rows=0 skipped_fresh=198"
+	)
+	assert stats["balance_sheet"] == {
+		"symbols_total": 198,
+		"symbols_ok": 0,
+		"rows_written": 0,
+		"skipped_fresh": 198,
+		"skipped_no_q": 0,
+		"failed_symbols": [],
+	}
+
+
+def test_parse_phase_lines_no_q_value():
+	stats = parse_phase_lines(
+		"PHASE cash_flow_quarterly total=198 ok=72 rows=358 skipped_fresh=81 no_q=45"
+	)
+	assert stats["cash_flow_quarterly"] == {
+		"symbols_total": 198,
+		"symbols_ok": 72,
+		"rows_written": 358,
+		"skipped_fresh": 81,
+		"skipped_no_q": 45,
+		"failed_symbols": [],
 	}
 
 
@@ -98,7 +161,7 @@ def test_parse_phase_lines_malformed_lines_skipped():
 	assert stats == {
 		"good": {
 			"symbols_total": 10, "symbols_ok": 10, "rows_written": 10,
-			"failed_symbols": [],
+			"skipped_fresh": 0, "skipped_no_q": 0, "failed_symbols": [],
 		}
 	}
 
@@ -108,9 +171,11 @@ def test_roundtrip_with_summary_line():
 	stats = new_phase("quote", 100)
 	stats["symbols_ok"] = 98
 	stats["rows_written"] = 98
+	stats["skipped_fresh"] = 2
+	stats["skipped_no_q"] = 0
 	stats["failed_symbols"] = ["BAD1"]
 	parsed = parse_phase_lines(summary_line(stats))
 	assert parsed["quote"] == {
 		"symbols_total": 100, "symbols_ok": 98, "rows_written": 98,
-		"failed_symbols": ["BAD1"],
+		"skipped_fresh": 2, "skipped_no_q": 0, "failed_symbols": ["BAD1"],
 	}

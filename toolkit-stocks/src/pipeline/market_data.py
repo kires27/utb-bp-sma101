@@ -68,6 +68,11 @@ def run_yf(ctx, stats):
 			period = map_latest_yahoo_historical(latest) or PRICE_HISTORY_PERIOD
 		payload = yfs.history_payload(sym, period)
 		if payload is None:
+			# Transient empty-payload blips (Yahoo throttling / hiccup):
+			# one immediate re-fetch, no backoff loop. Doubles cost only
+			# for symbols that return empty twice.
+			payload = yfs.history_payload(sym, period)
+		if payload is None:
 			return None
 		payload["stock_id"] = stock_id
 		payload["latest"] = latest

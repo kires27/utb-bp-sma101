@@ -28,10 +28,12 @@ def summary_line(stats: dict) -> str:
 	net = ""
 	if "db_requests" in stats or "yf_requests" in stats:
 		net = f" db={stats.get('db_requests', 0)} yf={stats.get('yf_requests', 0)}"
+	no_q = stats.get("skipped_no_q", 0)
+	no_q_str = f" no_q={no_q}" if no_q else ""
 	return (
 		f"PHASE {stats['phase']} total={stats['symbols_total']} "
 		f"ok={stats['symbols_ok']} rows={stats['rows_written']}"
-		f" skipped_fresh={stats.get('skipped_fresh', 0)}{failed_str}{net}"
+		f" skipped_fresh={stats.get('skipped_fresh', 0)}{no_q_str}{failed_str}{net}"
 	)
 
 

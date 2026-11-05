@@ -294,6 +294,31 @@ def get_stamped_stock_ids(table: str, stock_ids: list[int]) -> set[int]:
 		return set()
 
 
+def get_stock_ids_with_annual(table: str, stock_ids: list[int]) -> set[int]:
+	'''stock_ids having at least one annual (FY) row in the table.
+
+	Used to classify empty quarterly payloads: if the same symbol reports
+	annual data, missing quarterly is a reporting-frequency reality
+	(half-yearly reporters), not a fetch failure.
+	'''
+	conn = get_connection()
+	cursor = conn.cursor()
+
+	try:
+		cursor.execute(
+			sql.SQL("""
+				SELECT DISTINCT stock_id
+				FROM {}
+				WHERE stock_id = ANY(%s) AND period = 'FY'
+			""").format(sql.Identifier(table)),
+			(stock_ids,)
+		)
+		return {row[0] for row in cursor.fetchall()}
+	except Exception as e:
+		printf(f"get_stock_ids_with_annual failed: {e}", lv.WARNING)
+		return set()
+
+
 def get_quarterly_fetch_ids(
 	statement_tables: list[str], stock_ids: list[int], sweep_bucket: int | None = None,
 ) -> set[int]:

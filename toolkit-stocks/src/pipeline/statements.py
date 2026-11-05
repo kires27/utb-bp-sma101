@@ -6,7 +6,7 @@ from lib.transforms.statements import group_statement_records
 from lib.module.printf import printf, level as lv
 from lib.supabase.sql_functions import (
 	get_quarterly_fetch_ids, get_stamped_stock_ids, get_fresh_stock_ids,
-	touch_statement_rows, RowFlusher,
+	get_stock_ids_with_annual, touch_statement_rows, RowFlusher,
 )
 from constants.pipeline import (
 	EARNINGS_EVENT_LOOKAHEAD_DAYS, MAX_SUPPRESSION_GAP_DAYS, QUARTERLY_FISCAL_WINDOW_DAYS,
@@ -138,10 +138,18 @@ def run_statements(ctx, finance_type: str, db_table: str, null_tolerance: float,
 		null_tolerance=null_tolerance,
 	)
 
+	no_q_symbols: list[str] = []		# quarterly fetch ok, but payload empty
+
 	for symbol in needed:
 		records = grouped.get(symbol)
 		if records is None:
-			count_symbol(stats, False, symbol)
+			if period_type == "quarterly":
+				# Empty quarterly payload: could be a fetch failure OR a
+				# half-yearly reporter (HK/LSE/Swiss) with no quarterly data
+				# at all. Resolved below via annual-row existence check.
+				no_q_symbols.append(symbol)
+			else:
+				count_symbol(stats, False, symbol)
 			continue
 		printf(f"---- {symbol} {finance_type} ----", lv.INFO)
 		rows = build_statement_rows(symbol, ctx.stock_ids[symbol], records, period_type, finance_type)
@@ -152,6 +160,23 @@ def run_statements(ctx, finance_type: str, db_table: str, null_tolerance: float,
 		if rows:
 			touch_statement_rows(db_table, [ctx.stock_ids[symbol]])
 		count_symbol(stats, True)
+
+	# No-quarterly resolution: annual rows present -> the company simply does
+	# not report quarterly; count as skip (ok). No annual rows either -> the
+	# fetch itself failed; count as failure.
+	if no_q_symbols:
+		annual_ids = get_stock_ids_with_annual(db_table, [ctx.stock_ids[s] for s in no_q_symbols])
+		no_q_skipped = [s for s in no_q_symbols if ctx.stock_ids[s] in annual_ids]
+		for symbol in no_q_skipped:
+			stats["skipped_no_q"] = stats.get("skipped_no_q", 0) + 1
+			count_symbol(stats, True)
+		for symbol in no_q_symbols:
+			if ctx.stock_ids[symbol] not in annual_ids:
+				count_symbol(stats, False, symbol)
+		# Touch annual rows so half-yearly reporters are not re-targeted as
+		# unstamped every single day (fetch only re-fires when annual stale).
+		if not force and no_q_skipped:
+			skipped_symbols.extend(no_q_skipped)
 
 	stats["rows_written"] = flusher.finish()
 

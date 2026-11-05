@@ -64,11 +64,11 @@ def test_parse_phase_lines_roundtrip():
 	stats = parse_phase_lines("\n".join(lines))
 	assert stats["market_data"] == {
 		"symbols_total": 100, "symbols_ok": 98, "rows_written": 1234,
-		"failed_symbols": ["BAD1"],
+		"skipped_fresh": 0, "skipped_no_q": 0, "failed_symbols": ["BAD1"],
 	}
 	assert stats["quote"] == {
 		"symbols_total": 100, "symbols_ok": 100, "rows_written": 100,
-		"failed_symbols": [],
+		"skipped_fresh": 0, "skipped_no_q": 0, "failed_symbols": [],
 	}
 	assert len(stats) == 2
 

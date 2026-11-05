@@ -19,8 +19,9 @@ MAX_FAILED_RATIO = 0.02		# >2% of symbols failed -> suspicious
 MIN_ROWS = 1				# a healthy run always writes something
 # Phases whose 0-row runs are healthy: quote is marketState-gated (closed
 # markets write nothing; hourly cron keeps freshness), calendar writes only
-# when new events appear.
-MIN_ROWS_PHASE_EXEMPT = {"quote", "calendar"}
+# when new events appear, overview is an idempotent upsert (unchanged stock
+# rows legitimately update nothing).
+MIN_ROWS_PHASE_EXEMPT = {"quote", "calendar", "overview"}
 
 
 def days_since(d: date) -> int:
@@ -48,16 +49,20 @@ def check_failed_ratio(stats: dict) -> tuple[bool, str]:
 	total, ok = stats.get("symbols_total", 0), stats.get("symbols_ok", 0)
 	if total == 0:
 		return False, "no symbols processed at all"
-	failed = total - ok
+	skipped = stats.get("skipped_fresh", 0)
+	no_q = stats.get("skipped_no_q", 0)
+	failed = total - ok - skipped - no_q		# fresh skips fetched nothing, no-quarterly are data-availability skips
 	ratio = failed / total
 	ok_flag = ratio <= MAX_FAILED_RATIO
 	extra = f" first: {', '.join(stats.get('failed_symbols', []))}" if failed else ""
-	msg = f"symbols: ok={ok}/{total} failed={failed} ({ratio:.1%}, limit {MAX_FAILED_RATIO:.0%}){extra}"
+	skip_str = f" skipped_fresh={skipped}" if skipped else ""
+	no_q_str = f" no_q={no_q}" if no_q else ""
+	msg = f"symbols: ok={ok}/{total} failed={failed} ({ratio:.1%}, limit {MAX_FAILED_RATIO:.0%}){skip_str}{no_q_str}{extra}"
 	return ok_flag, msg
 
 
 def parse_phase_lines(log_text: str) -> dict[str, dict]:
-	'''Parse "PHASE <name> total=.. ok=.. rows=.." lines from pipeline output.'''
+	'''Parse "PHASE <name> total=.. ok=.. rows=.. skipped_fresh=.." lines.'''
 	stats = {}
 	for line in log_text.splitlines():
 		if not line.startswith("PHASE "):
@@ -65,10 +70,14 @@ def parse_phase_lines(log_text: str) -> dict[str, dict]:
 		parts = line.split()
 		try:
 			first_part = next((p for p in parts[5:] if p.startswith("first=")), None)
+			skip_part = next((p for p in parts[5:] if p.startswith("skipped_fresh=")), None)
+			no_q_part = next((p for p in parts[5:] if p.startswith("no_q=")), None)
 			entry = {
 				"symbols_total": int(parts[2].split("=")[1]),
 				"symbols_ok": int(parts[3].split("=")[1]),
 				"rows_written": int(parts[4].split("=")[1]),
+				"skipped_fresh": int(skip_part.removeprefix("skipped_fresh=")) if skip_part else 0,
+				"skipped_no_q": int(no_q_part.removeprefix("no_q=")) if no_q_part else 0,
 				"failed_symbols": first_part.removeprefix("first=").split(",") if first_part else [],
 			}
 		except (IndexError, ValueError):
@@ -107,10 +116,13 @@ def run(mode: str, log_path: str | None) -> int:
 			if not ok:
 				failures.append(msg)
 			rows = stats.get("rows_written", 0)
-			# Quarterly statement phases legitimately write 0 rows on days where
-			# every symbol is fresh or suppressed by an upcoming earnings date.
-			# quote/calendar are exempt (marketState-gated / episodic).
-			if rows < MIN_ROWS and name not in MIN_ROWS_PHASE_EXEMPT and not name.endswith("_quarterly"):
+			skipped = stats.get("skipped_fresh", 0)
+			# 0 rows is healthy when nothing was attempted (every symbol fresh —
+			# no fetch happened, so nothing could be written), when the phase is
+			# marketState-gated / episodic / idempotent-upsert (see EXEMPT), or
+			# for quarterly phases (fresh + upcoming-earnings suppression).
+			attempted = stats["symbols_total"] - skipped
+			if rows < MIN_ROWS and name not in MIN_ROWS_PHASE_EXEMPT and attempted > 0 and not name.endswith("_quarterly"):
 				failures.append(f"{name}: rows_written={rows} below minimum {MIN_ROWS}")
 
 	if failures:

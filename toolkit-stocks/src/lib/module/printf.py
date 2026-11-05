@@ -1,7 +1,6 @@
 import os
 from datetime import datetime
 from enum import StrEnum
-# import atexit
 
 
 class printf:
@@ -9,9 +8,10 @@ class printf:
 	_path = None
 	_to_console = True
 	_create_log = True
-	_last_log_pos = None
 	_last_msg = None
+	_last_level = None
 	_last_msg_counter = 1
+	_last_ts = None
 
 	@classmethod
 	def open(cls, directory: str = "log", create_log: bool = True, console_print: bool = True):
@@ -27,57 +27,51 @@ class printf:
 
 	@classmethod
 	def close(cls):
-		"""Close the log file if open."""
+		"""Flush pending duplicate summary, then close the log file."""
+		cls._flush_pending()
 		if cls._file:
 			timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-			cls._file.write(f"[{timestamp}] [INFO] Log ended successfully\n")
+			cls._write_line(f"[{timestamp}] [INFO] Log ended successfully")
 			cls._file.flush()
 			cls._file.close()
 			cls._file = None
 
 	def __new__(cls, message: str = "", level: str = "INFO"):
-		"""Log a message to the file (if enabled) and optionally to console."""
-		timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-		msg_row = f"[{timestamp}] [{level}] {message}"
-
-		is_duplicate = cls._last_msg == message
+		"""Log a message. Duplicates of (message, level) are suppressed; when duplication
+		ends, one summary line is emitted with the newest timestamp and total count."""
+		is_duplicate = cls._last_msg == message and cls._last_level == level
 
 		if is_duplicate:
 			cls._last_msg_counter += 1
-		else:
-			cls._last_msg_counter = 1
+			cls._last_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+			return None
 
-		if cls._create_log and cls._file:
-			cls._write_file(msg_row, is_duplicate)
+		# duplication ended (or this is the first message) — emit pending summary, then the new line
+		cls._flush_pending()
 
-		if cls._to_console:
-			cls._write_console(msg_row, is_duplicate)
-		
+		timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 		cls._last_msg = message
+		cls._last_level = level
+		cls._last_msg_counter = 1
+		cls._last_ts = timestamp
 
+		cls._write_line(f"[{timestamp}] [{level}] {message}")
 		return None
 
 	@classmethod
-	def _write_file(cls, msg_row, is_duplicate):
-		if is_duplicate:
-			cls._file.seek(cls._last_log_pos)
-			cls._file.truncate()
-		else:
-			cls._file.seek(0, 2)
-			cls._last_log_pos = cls._file.tell()
-
-		line = f"{msg_row} ({cls._last_msg_counter})\n" if is_duplicate else f"{msg_row}\n"
-		cls._file.write(line)
-		cls._file.flush()
+	def _flush_pending(cls):
+		"""If the last message had duplicates, write its summary line (newest timestamp + count)."""
+		if cls._last_msg is None or cls._last_msg_counter <= 1:
+			return
+		cls._write_line(f"[{cls._last_ts}] [{cls._last_level}] {cls._last_msg} ({cls._last_msg_counter})")
 
 	@classmethod
-	def _write_console(cls, msg_row, is_duplicate):
-		if is_duplicate:
-			print(f"\r{msg_row} ({cls._last_msg_counter})", end="", flush=True)
-		else:
-			# close previous live line
-			if cls._last_msg is not None: print()
-			print(msg_row, end="", flush=True)
+	def _write_line(cls, msg_row):
+		if cls._create_log and cls._file:
+			cls._file.write(f"{msg_row}\n")
+			cls._file.flush()
+		if cls._to_console:
+			print(msg_row, flush=True)
 
 
 class level(StrEnum):
