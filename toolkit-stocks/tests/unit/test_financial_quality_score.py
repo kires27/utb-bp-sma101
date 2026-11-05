@@ -1,6 +1,18 @@
 # flake8: noqa: E241
 from unittest.mock import patch
-from domain.financial_quality_score.quality_score import calculate_quality_score
+
+import pytest
+
+from domain.financial_quality_score.quality_score import (
+	calculate_quality_score, reset_quality_cache,
+)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_quality_cache():
+	reset_quality_cache()
+	yield
+	reset_quality_cache()
 
 
 def helper_translate_object(peers, data):
@@ -54,8 +66,8 @@ def test_calculate_quality_score_success():
 	}
 
 	with (patch("domain.financial_quality_score.quality_score.get_stock_sector", return_value=fake_industry),
-		  patch("domain.financial_quality_score.quality_score.get_stock_ids_within_sector", return_value=fake_peers),
-		  patch("domain.financial_quality_score.quality_score.get_financial_analysis", return_value=fake_analyses)):
+		  patch("domain.financial_quality_score.quality_score.get_stock_ids_within_sector", return_value=fake_peers) as peers_mock,
+		  patch("domain.financial_quality_score.quality_score.get_financial_analysis", return_value=fake_analyses) as fa_mock):
 
 		result1 = calculate_quality_score(
 			target_stock_id=fake_peers[0],
@@ -101,3 +113,7 @@ def test_calculate_quality_score_success():
 
 	assert result5["quality_score"] == fake_quality_scores[fake_peers[4]]
 	assert result5["category_scores"] == fake_category_scores[fake_peers[4]]
+
+	# 5 targets, one sector + fiscal date: peer set and FA block fetched once
+	assert peers_mock.call_count == 1
+	assert fa_mock.call_count == 1

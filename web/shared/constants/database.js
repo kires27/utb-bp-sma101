@@ -1,8 +1,8 @@
 export const TABLES = {
 	stock: "stock",
-	balance: "stock_balance_sheet",
-	cash: "stock_cash_flow",
-	income: "stock_income_statement",
+	balance: "stock_statement_balance",
+	cash: "stock_statement_cash",
+	income: "stock_statement_income",
 	financial: "stock_financial_analysis",
 	quote: "stock_quote",
 	watchlist: "watchlist",

@@ -67,114 +67,24 @@ export type Database = {
         };
         Relationships: [];
       };
-      stock_balance_sheet: {
-        Row: {
-          cash_cash_equivalents_and_short_term_investments: number | null;
-          current_assets: number | null;
-          current_liabilities: number | null;
-          fiscal_date: string;
-          net_tangible_assets: number | null;
-          period: Database["public"]["Enums"]["statement_period"];
-          retained_earnings: number | null;
-          share_issued: number | null;
-          stock_id: number;
-          stockholders_equity: number | null;
-          total_assets: number | null;
-          total_debt: number | null;
-          total_liabilities_net_minority_interest: number | null;
-        };
-        ComputedFields: never;
-        Insert: {
-          cash_cash_equivalents_and_short_term_investments?: number | null;
-          current_assets?: number | null;
-          current_liabilities?: number | null;
-          fiscal_date: string;
-          net_tangible_assets?: number | null;
-          period: Database["public"]["Enums"]["statement_period"];
-          retained_earnings?: number | null;
-          share_issued?: number | null;
-          stock_id: number;
-          stockholders_equity?: number | null;
-          total_assets?: number | null;
-          total_debt?: number | null;
-          total_liabilities_net_minority_interest?: number | null;
-        };
-        Update: {
-          cash_cash_equivalents_and_short_term_investments?: number | null;
-          current_assets?: number | null;
-          current_liabilities?: number | null;
-          fiscal_date?: string;
-          net_tangible_assets?: number | null;
-          period?: Database["public"]["Enums"]["statement_period"];
-          retained_earnings?: number | null;
-          share_issued?: number | null;
-          stock_id?: number;
-          stockholders_equity?: number | null;
-          total_assets?: number | null;
-          total_debt?: number | null;
-          total_liabilities_net_minority_interest?: number | null;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "stocks_balance_sheets_stock_id_fkey";
-            columns: ["stock_id"];
-            isOneToOne: false;
-            referencedRelation: "stock";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      stock_cash_flow: {
-        Row: {
-          capital_expenditure: number | null;
-          fiscal_date: string;
-          free_cash_flow: number | null;
-          operating_cash_flow: number | null;
-          period: Database["public"]["Enums"]["statement_period"];
-          stock_id: number;
-        };
-        ComputedFields: never;
-        Insert: {
-          capital_expenditure?: number | null;
-          fiscal_date: string;
-          free_cash_flow?: number | null;
-          operating_cash_flow?: number | null;
-          period: Database["public"]["Enums"]["statement_period"];
-          stock_id: number;
-        };
-        Update: {
-          capital_expenditure?: number | null;
-          fiscal_date?: string;
-          free_cash_flow?: number | null;
-          operating_cash_flow?: number | null;
-          period?: Database["public"]["Enums"]["statement_period"];
-          stock_id?: number;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "stocks_cash_flows_stock_id_fkey";
-            columns: ["stock_id"];
-            isOneToOne: false;
-            referencedRelation: "stock";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       stock_dividend: {
         Row: {
           date: string;
           dividend: number;
+          split_adjusted_on: string;
           stock_id: number;
         };
         ComputedFields: never;
         Insert: {
           date: string;
           dividend: number;
+          split_adjusted_on?: string;
           stock_id: number;
         };
         Update: {
           date?: string;
           dividend?: number;
+          split_adjusted_on?: string;
           stock_id?: number;
         };
         Relationships: [
@@ -186,6 +96,112 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      stock_economic_calendar: {
+        Row: {
+          country_code: string | null;
+          created_at: string;
+          event_datetime: string;
+          event_name: string | null;
+          event_type: string;
+          id: number;
+          period: string | null;
+          raw: Json | null;
+          region: string;
+          stock_id: number | null;
+          symbol: string | null;
+          timing: string | null;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          country_code?: string | null;
+          created_at?: string;
+          event_datetime: string;
+          event_name?: string | null;
+          event_type: string;
+          id?: never;
+          period?: string | null;
+          raw?: Json | null;
+          region: string;
+          stock_id?: number | null;
+          symbol?: string | null;
+          timing?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          country_code?: string | null;
+          created_at?: string;
+          event_datetime?: string;
+          event_name?: string | null;
+          event_type?: string;
+          id?: never;
+          period?: string | null;
+          raw?: Json | null;
+          region?: string;
+          stock_id?: number | null;
+          symbol?: string | null;
+          timing?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "stock_economic_calendar_stock_id_fkey";
+            columns: ["stock_id"];
+            isOneToOne: false;
+            referencedRelation: "stock";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      stock_exchange: {
+        Row: {
+          close_time: string;
+          country: string | null;
+          created_at: string;
+          currency: string | null;
+          exchange_code: string;
+          id: number;
+          long_name: string;
+          mic: string | null;
+          open_time: string;
+          short_name: string;
+          timezone: string;
+          updated_at: string;
+          week_pattern: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          close_time: string;
+          country?: string | null;
+          created_at?: string;
+          currency?: string | null;
+          exchange_code: string;
+          id?: never;
+          long_name: string;
+          mic?: string | null;
+          open_time: string;
+          short_name: string;
+          timezone: string;
+          updated_at?: string;
+          week_pattern?: string;
+        };
+        Update: {
+          close_time?: string;
+          country?: string | null;
+          created_at?: string;
+          currency?: string | null;
+          exchange_code?: string;
+          id?: never;
+          long_name?: string;
+          mic?: string | null;
+          open_time?: string;
+          short_name?: string;
+          timezone?: string;
+          updated_at?: string;
+          week_pattern?: string;
+        };
+        Relationships: [];
       };
       stock_financial_analysis: {
         Row: {
@@ -282,84 +298,39 @@ export type Database = {
       };
       stock_historical_price: {
         Row: {
-          adj_close: number | null;
           close: number;
           date: string;
           high: number | null;
           low: number | null;
           open: number;
+          split_adjusted_on: string;
           stock_id: number;
           volume: number | null;
         };
         ComputedFields: never;
         Insert: {
-          adj_close?: number | null;
           close: number;
           date: string;
           high?: number | null;
           low?: number | null;
           open: number;
+          split_adjusted_on?: string;
           stock_id: number;
           volume?: number | null;
         };
         Update: {
-          adj_close?: number | null;
           close?: number;
           date?: string;
           high?: number | null;
           low?: number | null;
           open?: number;
+          split_adjusted_on?: string;
           stock_id?: number;
           volume?: number | null;
         };
         Relationships: [
           {
             foreignKeyName: "stocks_historical_prices_stock_id_fkey";
-            columns: ["stock_id"];
-            isOneToOne: false;
-            referencedRelation: "stock";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      stock_income_statement: {
-        Row: {
-          basic_average_shares: number | null;
-          fiscal_date: string;
-          gross_profit: number | null;
-          net_income: number | null;
-          operating_income: number | null;
-          otherunder_preferred_stock_dividend: number | null;
-          period: Database["public"]["Enums"]["statement_period"];
-          stock_id: number;
-          total_revenue: number | null;
-        };
-        ComputedFields: never;
-        Insert: {
-          basic_average_shares?: number | null;
-          fiscal_date: string;
-          gross_profit?: number | null;
-          net_income?: number | null;
-          operating_income?: number | null;
-          otherunder_preferred_stock_dividend?: number | null;
-          period: Database["public"]["Enums"]["statement_period"];
-          stock_id: number;
-          total_revenue?: number | null;
-        };
-        Update: {
-          basic_average_shares?: number | null;
-          fiscal_date?: string;
-          gross_profit?: number | null;
-          net_income?: number | null;
-          operating_income?: number | null;
-          otherunder_preferred_stock_dividend?: number | null;
-          period?: Database["public"]["Enums"]["statement_period"];
-          stock_id?: number;
-          total_revenue?: number | null;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "stocks_income_statements_stock_id_fkey";
             columns: ["stock_id"];
             isOneToOne: false;
             referencedRelation: "stock";
@@ -436,6 +407,153 @@ export type Database = {
           },
         ];
       };
+      stock_statement_balance: {
+        Row: {
+          cash_cash_equivalents_and_short_term_investments: number | null;
+          current_assets: number | null;
+          current_liabilities: number | null;
+          fiscal_date: string;
+          net_tangible_assets: number | null;
+          period: Database["public"]["Enums"]["statement_period"];
+          retained_earnings: number | null;
+          share_issued: number | null;
+          stock_id: number;
+          stockholders_equity: number | null;
+          total_assets: number | null;
+          total_debt: number | null;
+          total_liabilities_net_minority_interest: number | null;
+          updated_at: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          cash_cash_equivalents_and_short_term_investments?: number | null;
+          current_assets?: number | null;
+          current_liabilities?: number | null;
+          fiscal_date: string;
+          net_tangible_assets?: number | null;
+          period: Database["public"]["Enums"]["statement_period"];
+          retained_earnings?: number | null;
+          share_issued?: number | null;
+          stock_id: number;
+          stockholders_equity?: number | null;
+          total_assets?: number | null;
+          total_debt?: number | null;
+          total_liabilities_net_minority_interest?: number | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          cash_cash_equivalents_and_short_term_investments?: number | null;
+          current_assets?: number | null;
+          current_liabilities?: number | null;
+          fiscal_date?: string;
+          net_tangible_assets?: number | null;
+          period?: Database["public"]["Enums"]["statement_period"];
+          retained_earnings?: number | null;
+          share_issued?: number | null;
+          stock_id?: number;
+          stockholders_equity?: number | null;
+          total_assets?: number | null;
+          total_debt?: number | null;
+          total_liabilities_net_minority_interest?: number | null;
+          updated_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "stocks_balance_sheets_stock_id_fkey";
+            columns: ["stock_id"];
+            isOneToOne: false;
+            referencedRelation: "stock";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      stock_statement_cash: {
+        Row: {
+          capital_expenditure: number | null;
+          fiscal_date: string;
+          free_cash_flow: number | null;
+          operating_cash_flow: number | null;
+          period: Database["public"]["Enums"]["statement_period"];
+          stock_id: number;
+          updated_at: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          capital_expenditure?: number | null;
+          fiscal_date: string;
+          free_cash_flow?: number | null;
+          operating_cash_flow?: number | null;
+          period: Database["public"]["Enums"]["statement_period"];
+          stock_id: number;
+          updated_at?: string | null;
+        };
+        Update: {
+          capital_expenditure?: number | null;
+          fiscal_date?: string;
+          free_cash_flow?: number | null;
+          operating_cash_flow?: number | null;
+          period?: Database["public"]["Enums"]["statement_period"];
+          stock_id?: number;
+          updated_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "stocks_cash_flows_stock_id_fkey";
+            columns: ["stock_id"];
+            isOneToOne: false;
+            referencedRelation: "stock";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      stock_statement_income: {
+        Row: {
+          basic_average_shares: number | null;
+          fiscal_date: string;
+          gross_profit: number | null;
+          net_income: number | null;
+          operating_income: number | null;
+          otherunder_preferred_stock_dividend: number | null;
+          period: Database["public"]["Enums"]["statement_period"];
+          stock_id: number;
+          total_revenue: number | null;
+          updated_at: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          basic_average_shares?: number | null;
+          fiscal_date: string;
+          gross_profit?: number | null;
+          net_income?: number | null;
+          operating_income?: number | null;
+          otherunder_preferred_stock_dividend?: number | null;
+          period: Database["public"]["Enums"]["statement_period"];
+          stock_id: number;
+          total_revenue?: number | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          basic_average_shares?: number | null;
+          fiscal_date?: string;
+          gross_profit?: number | null;
+          net_income?: number | null;
+          operating_income?: number | null;
+          otherunder_preferred_stock_dividend?: number | null;
+          period?: Database["public"]["Enums"]["statement_period"];
+          stock_id?: number;
+          total_revenue?: number | null;
+          updated_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "stocks_income_statements_stock_id_fkey";
+            columns: ["stock_id"];
+            isOneToOne: false;
+            referencedRelation: "stock";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       watchlist: {
         Row: {
           created_at: string;
@@ -497,7 +615,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      get_all_medians: { Args: Record<PropertyKey, never>; Returns: Json };
+      get_all_medians: {
+        Args: { p_stock_sector: string; p_table_fa: string; p_table_stock: string };
+        Returns: Json;
+      };
     };
     Enums: {
       statement_period: "Q1" | "Q2" | "Q3" | "Q4" | "FY" | "TTM";

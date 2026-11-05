@@ -38,7 +38,7 @@ export async function getQuote(supabase, stockId, selectColumns = ["*"]) {
  * return array of objects, starting from newest
  * @param {*} supabase 
  * @param {string} symbol 
- * @param {"stock_cash_flow" | "stock_balance_sheet" | "stock_income_statement"} statementTable 
+ * @param {"stock_statement_cash" | "stock_statement_balance" | "stock_statement_income"} statementTable 
  * @param {number} limit 
  * @returns {Promise<object[]>}
  */

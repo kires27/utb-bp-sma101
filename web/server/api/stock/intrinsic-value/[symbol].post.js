@@ -22,8 +22,8 @@ export default defineEventHandler(async (event) => {
 	const id = stock.id;
 
 	const quote = await getQuote(client, id, ["market_cap", "stock_price"]);
-	const cashFlow = await getFinancialStatement(client, id, "stock_cash_flow", projectionHorizon);
-	const balanceSheet = await getFinancialStatement(client, id, "stock_balance_sheet", 1);
+	const cashFlow = await getFinancialStatement(client, id, "stock_statement_cash", projectionHorizon);
+	const balanceSheet = await getFinancialStatement(client, id, "stock_statement_balance", 1);
 
 	return calculateIntrinsicValue(
 		quote["market_cap"],

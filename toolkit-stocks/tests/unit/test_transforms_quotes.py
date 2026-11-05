@@ -2,13 +2,14 @@ from lib.transforms.quotes import build_quote_row
 
 
 def test_basic_row_fields():
-	quote = {"stock_price": 100.5, "market_cap": 2e12, "regular_market_change_percent": 0.01, "regular_market_change": 1.2}
+	quote = {"stock_price": 100.5, "market_cap": 2e12, "regular_market_change_percent": 0.01, "regular_market_change": 1.2, "currency": "USD"}
 	row = build_quote_row("AAPL", 3, quote)
 	assert row["stock_id"] == 3
 	assert row["stock_price"] == 100.5
 	assert row["market_cap"] == 2e12
 	assert row["regular_market_change_percent"] == 0.01
 	assert row["regular_market_change"] == 1.2
+	assert row["currency"] == "USD"
 
 
 def test_string_market_time_converted():

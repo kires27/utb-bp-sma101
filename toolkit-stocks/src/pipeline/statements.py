@@ -10,6 +10,7 @@ from lib.supabase.sql_functions import (
 )
 from constants.pipeline import (
 	EARNINGS_EVENT_LOOKAHEAD_DAYS, MAX_SUPPRESSION_GAP_DAYS, QUARTERLY_FISCAL_WINDOW_DAYS,
+	QUARTERLY_SWEEP_BUCKETS, QUARTERLY_SWEEP_WINDOW_DAYS,
 )
 import constants.db_tables as dbt
 from .context import valid_symbols
@@ -45,7 +46,9 @@ def fresh_symbols(ctx, db_table: str, targets: list[str]) -> set[str]:
 	return fresh
 
 
-def quarterly_fetch_decision(gap_days: int | None, next_event_days_out: int | None) -> bool:
+def quarterly_fetch_decision(
+	gap_days: int | None, next_event_days_out: int | None, swept: bool = False,
+) -> bool:
 	'''True = fetch quarterly statement data for the symbol.
 
 	Pure counterpart of the SQL in get_quarterly_fetch_ids.
@@ -54,8 +57,13 @@ def quarterly_fetch_decision(gap_days: int | None, next_event_days_out: int | No
 		None = no rows at all -> unknown -> fetch (COALESCE fallback).
 	next_event_days_out: days until the nearest known future earnings event.
 		None = no known event -> fetch (gap-trigger fallback).
+	swept: symbol is in today's revision-sweep shard (stock_id mod N == day
+		bucket). Sweep overrides suppression and the fresh window for known
+		rows within the sweep window.
 
-	Fetch iff stale AND NOT suppressed:
+	Fetch iff (swept AND gap known AND gap <= sweep window) OR
+	(stale AND NOT suppressed):
+	- swept and gap <= QUARTERLY_SWEEP_WINDOW_DAYS -> fetch (restatement check);
 	- fresh (gap <= QUARTERLY_FISCAL_WINDOW_DAYS) -> no fetch;
 	- suppressed (event beyond lookahead AND gap < MAX_SUPPRESSION_GAP_DAYS)
 		-> no fetch (dead-fetch elimination);
@@ -63,6 +71,8 @@ def quarterly_fetch_decision(gap_days: int | None, next_event_days_out: int | No
 		postponed until near-term, or gap too old for suppression to be safe.
 	'''
 	gap = gap_days if gap_days is not None else 999_999	# unknown -> maximally stale
+	if swept and gap_days is not None and gap <= QUARTERLY_SWEEP_WINDOW_DAYS:
+		return True	# sweep shard: revision-prone rows, check for restatements
 	if gap <= QUARTERLY_FISCAL_WINDOW_DAYS:
 		return False	# fresh
 	if next_event_days_out is not None and next_event_days_out > EARNINGS_EVENT_LOOKAHEAD_DAYS \
@@ -72,10 +82,12 @@ def quarterly_fetch_decision(gap_days: int | None, next_event_days_out: int | No
 
 
 def quarterly_targets(ctx, db_table: str, targets: list[str]) -> list[str]:
-	'''Quarterly fetch targets: stale-and-not-suppressed symbols, plus legacy
-	NULL-stamp rows in this table (refetched and stamped once).'''
+	'''Quarterly fetch targets: stale-and-not-suppressed symbols, today's
+	revision-sweep shard, plus legacy NULL-stamp rows in this table
+	(refetched and stamped once).'''
 	stock_ids = [ctx.stock_ids[s] for s in targets]
-	fetch_ids = get_quarterly_fetch_ids(QUARTERLY_STATEMENT_TABLES, stock_ids)
+	sweep_bucket = date.today().toordinal() % QUARTERLY_SWEEP_BUCKETS
+	fetch_ids = get_quarterly_fetch_ids(QUARTERLY_STATEMENT_TABLES, stock_ids, sweep_bucket)
 	stamped_ids = get_stamped_stock_ids(db_table, stock_ids)
 	needed = [
 		s for s in targets

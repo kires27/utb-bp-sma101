@@ -143,6 +143,57 @@ def get_latest_market_times(stock_ids: list[int]) -> dict[int, dt_datetime]:
 		return {}
 
 
+def get_missing_market_caps(stock_ids: list[int]) -> set[int]:
+	'''stock_ids whose stored stock_quote row has market_cap NULL.
+	Self-heal: Yahoo intermittently omits marketCap in batch responses; without
+	a rewrite the NULL is sticky (closed market, same regular_market_time).'''
+	if not stock_ids:
+		return set()
+	conn = get_connection()
+	cursor = conn.cursor()
+
+	try:
+		cursor.execute(
+			sql.SQL("""
+				SELECT stock_id
+				FROM {}
+				WHERE stock_id = ANY(%s) AND market_cap IS NULL
+			""").format(sql.Identifier(dbt.quote)),
+			(stock_ids,)
+		)
+		return {row[0] for row in cursor.fetchall()}
+	except Exception as e:
+		printf(f"get_missing_market_caps failed: {e}", lv.WARNING)
+		return set()
+
+
+def get_latest_share_issued(stock_ids: list[int]) -> dict[int, float]:
+	'''stock_id -> share_issued from the newest balance sheet row with a
+	non-null value. Market cap provenance: own calc (price x share_issued)
+	primary, Yahoo marketCap fallback. At the same fiscal_date the quarterly
+	row wins over FY (period::text DESC: Q4 > FY), matching the fresher
+	filing used for the Toyota treasury-share case.'''
+	if not stock_ids:
+		return {}
+	conn = get_connection()
+	cursor = conn.cursor()
+
+	try:
+		cursor.execute(
+			sql.SQL("""
+				SELECT DISTINCT ON (stock_id) stock_id, share_issued
+				FROM {}
+				WHERE stock_id = ANY(%s) AND share_issued IS NOT NULL
+				ORDER BY stock_id, fiscal_date DESC, period::text DESC
+			""").format(sql.Identifier(dbt.balance_sheet)),
+			(stock_ids,)
+		)
+		return {row[0]: row[1] for row in cursor.fetchall()}
+	except Exception as e:
+		printf(f"get_latest_share_issued failed: {e}", lv.WARNING)
+		return {}
+
+
 def get_quotes(stock_ids: list[int]) -> dict[int, dict]:
 	'''stock_id -> {stock_price, market_cap} from stock_quote. FA reads live
 	market data from the DB (written by the quote phase) instead of per-symbol
@@ -243,14 +294,21 @@ def get_stamped_stock_ids(table: str, stock_ids: list[int]) -> set[int]:
 		return set()
 
 
-def get_quarterly_fetch_ids(statement_tables: list[str], stock_ids: list[int]) -> set[int]:
-	'''stock_ids needing a quarterly statement fetch: stale AND NOT suppressed.
+def get_quarterly_fetch_ids(
+	statement_tables: list[str], stock_ids: list[int], sweep_bucket: int | None = None,
+) -> set[int]:
+	'''stock_ids needing a quarterly statement fetch: stale AND NOT suppressed,
+	OR part of today's revision sweep (1/7 shard of revision-prone symbols).
 
 	Stale = today - max(newest fiscal_date across statement_tables) > window;
 	unknown symbols (no rows in any table) count as stale via COALESCE fallback.
 	Suppressed = a known future earnings event sits beyond the lookahead window
 	AND the gap is still < MAX_SUPPRESSION_GAP_DAYS (missing >~2 quarters is
 	never suppressed, so a wrong far-future event cannot hide staleness).
+
+	Sweep branch ignores suppression and requires known rows (gap <= sweep
+	window): refetch a rotating slice to catch restatements of recent data
+	within ~BUCKETS days instead of waiting out the fresh window.
 	'''
 	if not stock_ids:
 		return set()
@@ -259,6 +317,8 @@ def get_quarterly_fetch_ids(statement_tables: list[str], stock_ids: list[int]) -
 		EARNINGS_EVENT_LOOKAHEAD_DAYS,
 		MAX_SUPPRESSION_GAP_DAYS,
 		QUARTERLY_FISCAL_WINDOW_DAYS,
+		QUARTERLY_SWEEP_BUCKETS,
+		QUARTERLY_SWEEP_WINDOW_DAYS,
 	)
 
 	conn = get_connection()
@@ -271,6 +331,7 @@ def get_quarterly_fetch_ids(statement_tables: list[str], stock_ids: list[int]) -
 			).format(sql.Identifier(table))
 			for table in statement_tables
 		])
+		gap_expr = sql.SQL("now()::date - COALESCE(n.newest_fiscal_date, date '1900-01-01')")
 		cursor.execute(
 			sql.SQL("""
 				WITH ids AS (
@@ -295,15 +356,26 @@ def get_quarterly_fetch_ids(statement_tables: list[str], stock_ids: list[int]) -
 				SELECT n.stock_id
 				FROM n
 				LEFT JOIN ev USING (stock_id)
-				WHERE (now()::date - COALESCE(n.newest_fiscal_date, date '1900-01-01')) > %s
-					AND (ev.next_event IS NULL
-						OR (now()::date - COALESCE(n.newest_fiscal_date, date '1900-01-01')) >= %s)
+				WHERE (
+					-- sweep: revision-prone rows, 1/N rotating shard
+					n.newest_fiscal_date IS NOT NULL
+					AND ({gap}) <= %s
+					AND mod(n.stock_id, %s) = %s
+				) OR (
+					-- stale AND not suppressed
+					({gap}) > %s
+					AND (ev.next_event IS NULL OR ({gap}) >= %s)
+				)
 			""").format(
 				branches=branches,
 				cal=sql.Identifier(dbt.economic_calendar),
+				gap=gap_expr,
 			),
 			list(stock_ids) * len(statement_tables) + (
 				EARNINGS_EVENT_LOOKAHEAD_DAYS, list(stock_ids),
+				# sweep branch params
+				QUARTERLY_SWEEP_WINDOW_DAYS, QUARTERLY_SWEEP_BUCKETS, sweep_bucket,
+				# stale-and-not-suppressed branch params
 				QUARTERLY_FISCAL_WINDOW_DAYS, MAX_SUPPRESSION_GAP_DAYS,
 			),
 		)

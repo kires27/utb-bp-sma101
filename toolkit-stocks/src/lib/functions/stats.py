@@ -24,10 +24,14 @@ def count_symbol(stats: dict, ok: bool, symbol: str = None, rows: int = 0):
 def summary_line(stats: dict) -> str:
 	failed = stats["failed_symbols"][:_failed_line_cap]
 	failed_str = f" first={','.join(failed)}" if failed else ""
+	# Per-phase network deltas, stamped by runner._with_net (absent in tests).
+	net = ""
+	if "db_requests" in stats or "yf_requests" in stats:
+		net = f" db={stats.get('db_requests', 0)} yf={stats.get('yf_requests', 0)}"
 	return (
 		f"PHASE {stats['phase']} total={stats['symbols_total']} "
 		f"ok={stats['symbols_ok']} rows={stats['rows_written']}"
-		f" skipped_fresh={stats.get('skipped_fresh', 0)}{failed_str}"
+		f" skipped_fresh={stats.get('skipped_fresh', 0)}{failed_str}{net}"
 	)
 
 
@@ -72,14 +76,14 @@ def _write_step_summary(phases: list[dict]):
 	try:
 		with open(path, "a", encoding="utf-8") as f:
 			f.write("## Pipeline run summary\n\n")
-			f.write("| phase | total | ok | rows written | skipped (fresh) | failed |\n")
-			f.write("|---|---|---|---|---|---|\n")
+			f.write("| phase | total | ok | rows written | skipped (fresh) | failed | db req | yf req |\n")
+			f.write("|---|---|---|---|---|---|---|---|\n")
 			for stats in phases:
 				failed = ", ".join(stats["failed_symbols"])
 				f.write(
 					f"| {stats['phase']} | {stats['symbols_total']} | {stats['symbols_ok']} "
 					f"| {stats['rows_written']} | {stats.get('skipped_fresh', 0)} "
-					f"| {failed} |\n"
+					f"| {failed} | {stats.get('db_requests', 0)} | {stats.get('yf_requests', 0)} |\n"
 				)
 			f.write("\n")
 			net = snapshot()

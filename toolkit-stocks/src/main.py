@@ -19,6 +19,8 @@ parser.add_argument("--full", action="store_true",
 	help="Full-history fetch mode (prices/statements); implied by a wiped table needing re-pull")
 parser.add_argument("--force", action="store_true",
 	help="Bypass freshness checks, re-pull everything (price history capped at 10y)")
+parser.add_argument("--log", action="store_true",
+	help="Also write a timestamped .log file to log/ (console output unchanged)")
 args = parser.parse_args()
 
 selected = [p.strip() for p in args.phases.split(",") if p.strip()]
@@ -30,7 +32,7 @@ if not selected:
 for phase in PHASES:
 	setattr(args, phase, phase in selected)
 
-printf.open("log", create_log=False, console_print=True)
+printf.open("log", create_log=args.log, console_print=True)
 load_dotenv()
 
 from lib.supabase.sql_functions import get_symbols, get_stock_id_map

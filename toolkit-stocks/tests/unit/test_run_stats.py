@@ -76,3 +76,17 @@ def test_parse_phase_lines_roundtrip():
 def test_parse_phase_lines_empty_and_malformed():
 	assert parse_phase_lines("") == {}
 	assert parse_phase_lines("PHASE broken total=x") == {}
+
+
+def test_summary_line_with_network_deltas():
+	stats = new_phase("fqs", 10)
+	stats["symbols_ok"] = 10
+	stats["rows_written"] = 10
+	stats["db_requests"] = 42
+	stats["yf_requests"] = 3
+	line = summary_line(stats)
+	assert line.endswith("db=42 yf=3")
+	# verify.py parsing must ignore the network tail
+	parsed = parse_phase_lines(line)
+	assert parsed["fqs"]["symbols_ok"] == 10
+	assert parsed["fqs"]["failed_symbols"] == []

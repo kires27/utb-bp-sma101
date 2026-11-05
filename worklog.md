@@ -1,5 +1,20 @@
 # Pracovní deník
 
+## 5.11.2026
+Přejmenování tabulek výkazů: `stock_balance_sheet` → `stock_statement_balance`, `stock_cash_flow` → `stock_statement_cash`, `stock_income_statement` → `stock_statement_income` (kire DB + `db_tables.py` + regenerované `web/app/types/database.types.ts`; nové `updated_at` sloupce, `stock_dividend.split_adjusted_on`).
+
+Kvartální výkazy: přidán „staggered revision sweep“ — každý den se refetchuje 1/7 rotujícího shardu revizí-zranitelných symbolů (deterministicky `stock_id mod 7 == dnešní bucket`, žádný stav, žádné nové cron joby). Chytá restatements/adjustmenty nedávných kvartálů, které nemají signál v earnings kalendáři; nejhorší lag revize klesá z ~95d fresh okna na ~7 dní. `get_quarterly_fetch_ids` má nový sweep branch (ignoruje suppression, vyžaduje známé řádky v rámci 180d sweep okna); pure logika `quarterly_fetch_decision(swept)` rozšířena o tentýž branch.
+
+market_cap provenance: vlastní výpočet (stock_price × nejnovější `share_issued` z `stock_statement_balance`, při stejném fiscal_date kvartál vyhrává nad FY přes `period::text DESC`) je primární; Yahoo marketCap jen fallback při chybějících vstupech. Divergence >2 % loguje WARNING (log-only, vlastní hodnota vždy vyhrává — Yahoo bývá stale strana; Samsung, zahraniční filings). Self-heal: `get_missing_market_caps` přepíše sticky NULL market_cap řádky i v closed market (Yahoo občas marketCap v batch odpovědi vynechá). Japonsko caveat: issued zahrnuje treasury shares do zrušení → mírné nadhodnocení při buybacku.
+
+GBp fix: u pence-quoted symbolů (LSE) se dělí /100 i `regularMarketChange` (dřív jen cena) a currency label se normalizuje na ISO `GBP`; `currency` nově putuje do `stock_quote` řádků. Opraveno v quotes_batch i yfinance_source.
+
+fqs: run-scoped cache peer sad a FA bloků (`reset_quality_cache()` na začátku fáze) — bez ní se stejná peer data refetchovala pro každý symbol zvlášť. Safe, protože fqs běží striktně po fa. Per-symbol hlavička v logu.
+
+Monitoring: runner jede každou fázi přes `_with_net` a do stats štampuje delty DB/yfinance requestů — zobrazeny v summary řádku i GitHub step summary tabulce (nové sloupce `db req` / `yf req`). Nový `lib/functions/netstats.py` snapshot. `--log` flag: soubor `.log` do `log/` jen když se explicitně chce (konzole nezměněna). `get_latest_dates` pro ceny se volá jednou batchem na celý market_data run (dřív 1 query na symbol).
+
+Ostatní: flake8 kompletně odstraněn (`.flake8`, `toolkit-stocks/.flake8`). README přepsáno na nové `--phases` CLI (původní `--run hourly|daily|backfill` zrušeno — volbu fází teď dělá komma-list, pořadí je pevné v runneru). AGENTS.md doplněn o market_cap provenance. Nový `test_quotes_batch.py`; aktualizovány testy sweep/gating/run_stats/transforms/live smoke. Workflows po commitu `update workflows`/`fix after fetch verification` přeladěny na `--phases`.
+
 ## 2.11.2026
 FA fáze čte tržní data z `stock_quote` místo per-symbol yfinance volání (plan `PLAN-fa-metric-price.md`). Smazán `yf_quote` closure a `yfs.map_symbols`, místo toho jeden bulk read přes nové `get_metric_quotes(stock_ids)` (vrací jen `{stock_price, market_cap}`); chybějící řádek / null price / null market_cap = skip symbolu s chybou pojmenovávající chybějící pole (žádný fallback fetch, screener symboly dostanou FA až v dalším daily runu).
 

@@ -4,5 +4,6 @@
  "regular_market_change": -3.4400024,
  "regular_market_change_percent": -1.0030916,
  "regular_market_time": 1792526401,
- "stock_price": 339.5
+ "stock_price": 339.5,
+ "currency": "USD"
 }

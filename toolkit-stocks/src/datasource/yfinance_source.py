@@ -105,17 +105,25 @@ class YFinanceSource:
 			return None
 
 		price = info.get("regularMarketPrice")
-		# Pence-quoted symbols (LSE) report prices in GBp; statements are in
-		# GBP. Scale price to the statement currency so pe_ratio is not 100x.
-		if info.get("currency") in self.GBP_STYLE_CURRENCIES and price is not None:
-			price = price / 100
+		change = info.get("regularMarketChange")
+		currency = info.get("currency")
+		# Pence-quoted symbols (LSE) report prices and change in GBp; statements
+		# are in GBP. Scale both so pe_ratio is not 100x; marketCap is already
+		# base currency. Currency label normalized to the ISO code (GBP).
+		if currency in self.GBP_STYLE_CURRENCIES:
+			if price is not None:
+				price = price / 100
+			if change is not None:
+				change = change / 100
+			currency = "GBP"
 
 		return {
 			"stock_price": price,
 			"market_cap": info.get("marketCap"),
 			"regular_market_change_percent": info.get("regularMarketChangePercent"),
-			"regular_market_change": info.get("regularMarketChange"),
+			"regular_market_change": change,
 			"regular_market_time": info.get("regularMarketTime"),
+			"currency": currency,
 		}
 
 	def history(self, symbol: str, period: str = "max") -> object | None:

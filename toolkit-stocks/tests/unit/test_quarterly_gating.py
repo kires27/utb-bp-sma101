@@ -1,13 +1,14 @@
 '''Quarterly fetch gating: quarterly_fetch_decision boundary + suppression cases.
 
 Mirrors the SQL in lib.supabase.sql_functions.get_quarterly_fetch_ids.
-Fetch iff stale AND NOT suppressed.
+Fetch iff (swept AND gap known AND gap <= sweep window) OR (stale AND NOT suppressed).
 '''
 from pipeline.statements import quarterly_fetch_decision
 
 WINDOW = 95
 LOOKAHEAD = 7
 MAX_GAP = 180
+SWEEP = 180
 
 
 def test_gap_boundary():
@@ -61,3 +62,25 @@ def test_boundary_combinations():
 	assert quarterly_fetch_decision(96, LOOKAHEAD) is True	# 7d out -> fetch
 	# fresh gap suppresses nothing regardless
 	assert quarterly_fetch_decision(10, 400) is False
+
+
+def test_sweep_overrides_fresh_window():
+	# sweep shard catches restatements of recent data the fresh window misses
+	assert quarterly_fetch_decision(10, None, swept=True) is True
+	assert quarterly_fetch_decision(WINDOW, None, swept=True) is True
+
+
+def test_sweep_overrides_suppression():
+	# sweep ignores the earnings calendar entirely (no signal for revisions)
+	assert quarterly_fetch_decision(100, 400, swept=True) is True
+	assert quarterly_fetch_decision(120, 30, swept=True) is True
+
+
+def test_sweep_window_boundary():
+	# sweep applies only to known rows within the sweep window
+	assert quarterly_fetch_decision(SWEEP, 400, swept=True) is True
+	assert quarterly_fetch_decision(SWEEP + 1, 400, swept=True) is True	# beyond window -> normal rules (gap >= 180 -> never suppressed)
+	assert quarterly_fetch_decision(None, None, swept=True) is True	# unknown gap -> stale branch fetches
+	# not swept -> behavior unchanged
+	assert quarterly_fetch_decision(10, None, swept=False) is False
+	assert quarterly_fetch_decision(10, 400, swept=False) is False

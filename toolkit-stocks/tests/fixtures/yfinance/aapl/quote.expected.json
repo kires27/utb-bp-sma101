@@ -4,5 +4,6 @@
  "regular_market_change_percent": -1.0030916,
  "regular_market_time": "2026-10-20T20:00:01Z",
  "stock_id": 1,
- "stock_price": 339.5
+ "stock_price": 339.5,
+ "currency": "USD"
 }

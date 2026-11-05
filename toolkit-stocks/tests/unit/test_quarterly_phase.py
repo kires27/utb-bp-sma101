@@ -52,7 +52,7 @@ def _fakes(monkeypatch):
 		stamped_ids=set(),
 		fresh_ids=set(),
 	)
-	monkeypatch.setattr(ps, "get_quarterly_fetch_ids", lambda tables, ids: fake_sql.quarterly_fetch_ids)
+	monkeypatch.setattr(ps, "get_quarterly_fetch_ids", lambda tables, ids, bucket: fake_sql.quarterly_fetch_ids)
 	monkeypatch.setattr(ps, "get_stamped_stock_ids", lambda table, ids: fake_sql.stamped_ids)
 	monkeypatch.setattr(ps, "get_fresh_stock_ids", lambda table, ids, cutoff: fake_sql.fresh_ids)
 	monkeypatch.setattr(ps, "touch_statement_rows", lambda table, ids: touched.extend(ids))
@@ -63,7 +63,7 @@ def _fakes(monkeypatch):
 def _run(symbols=("AAPL", "MSFT", "NVDA"), **kw):
 	ctx = FakeCtx(list(symbols))
 	ctx.yfs = FakeYfs()
-	return run_statements(ctx, "income_statement", "stock_income_statement", 0.4, **kw), ctx
+	return run_statements(ctx, "income_statement", "stock_statement_income", 0.4, **kw), ctx
 
 
 def test_quarterly_fetches_only_stale_and_not_suppressed(_fakes):
@@ -77,7 +77,7 @@ def test_quarterly_fetches_only_stale_and_not_suppressed(_fakes):
 	assert stats["symbols_ok"] == 2
 	assert stats["skipped_fresh"] == 1
 	flusher = FakeFlusher.instances[0]
-	assert flusher.table == "stock_income_statement"
+	assert flusher.table == "stock_statement_income"
 	# quarterly rows carry Q-period mapping via build_statement_rows
 	assert all(r["period"] == "Q3" for r in flusher.rows)
 	# fetched symbols stamped; suppressed symbol bumped to restart its clock
@@ -111,7 +111,7 @@ def test_quarterly_force_fetches_all(_fakes):
 	ctx = FakeCtx(["AAPL"])
 	ctx.yfs = FakeYfs()
 	ctx.args = SimpleNamespace(force=True, full=False)
-	stats = run_statements(ctx, "income_statement", "stock_income_statement", 0.4, period_type="quarterly")
+	stats = run_statements(ctx, "income_statement", "stock_statement_income", 0.4, period_type="quarterly")
 	assert stats["symbols_ok"] == 1
 	assert stats.get("skipped_fresh", 0) == 0
 

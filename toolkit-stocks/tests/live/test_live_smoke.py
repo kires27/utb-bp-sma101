@@ -76,7 +76,7 @@ def test_quotes_batch_invariants():
 
 
 def test_quotes_batch_gbp_scaling():
-	'''GBp-quoted symbols: price scaled to base currency (marketCap untouched).'''
+	'''GBp-quoted symbols: price and change scaled to GBP, label normalized.'''
 	from data.symbols import manual_symbols
 
 	gbp_syms = [s for s in manual_symbols if s.endswith(".L")][:3]
@@ -84,5 +84,6 @@ def test_quotes_batch_gbp_scaling():
 	src = QuotesBatchSource()
 	quotes = src.fetch(gbp_syms)
 	for sym, q in quotes.items():
-		assert q["currency"] in ("GBp", "GBX")
+		assert q["currency"] == "GBP", f"{sym}: currency not normalized ({q['currency']})"
 		assert q["stock_price"] < q["market_cap"], f"{sym}: GBp price not scaled (price={q['stock_price']}, mcap={q['market_cap']})"
+		assert abs(q["regular_market_change"]) < q["stock_price"], f"{sym}: GBp change not scaled (change={q['regular_market_change']})"

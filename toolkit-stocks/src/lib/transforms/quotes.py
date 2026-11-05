@@ -23,6 +23,7 @@ def build_quote_row(symbol: str, stock_id: int, quote: dict) -> dict:
 			"market_cap": quote.get("market_cap"),
 			"regular_market_change_percent": quote.get("regular_market_change_percent"),
 			"regular_market_change": quote.get("regular_market_change"),
+			"currency": quote.get("currency"),
 		}
 
 		raw_time = quote.get("regular_market_time")

@@ -75,16 +75,22 @@ class QuotesBatchSource:
 		regular_market_time) + gating extras.
 		'''
 		price = record.get("regularMarketPrice")
-		# Pence-quoted symbols (LSE) report price in GBp; statements are in GBP.
-		# marketCap is already base currency (GBP), no scaling.
+		change = record.get("regularMarketChange")
 		currency = record.get("currency")
-		if currency in GBP_STYLE_CURRENCIES and price is not None:
-			price = price / 100
+		# Pence-quoted symbols (LSE) report price and change in GBp; statements
+		# are in GBP. Scale both to pounds; marketCap is already base currency.
+		# Currency label normalized to the ISO code (GBP).
+		if currency in GBP_STYLE_CURRENCIES:
+			if price is not None:
+				price = price / 100
+			if change is not None:
+				change = change / 100
+			currency = "GBP"
 
 		return {
 			"stock_price": price,
 			"market_cap": record.get("marketCap"),
-			"regular_market_change": record.get("regularMarketChange"),
+			"regular_market_change": change,
 			"regular_market_change_percent": record.get("regularMarketChangePercent"),
 			"regular_market_time": record.get("regularMarketTime"),
 			# gating extras (not part of build_quote_row contract)

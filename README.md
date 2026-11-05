@@ -93,11 +93,13 @@ symbols (--symbols db | file | screener)
     stock_financial_analysis …)
 ```
 
-Entry: `src/main.py --run <hourly|daily|backfill|calendar> --symbols <db|file|screener>` → `pipeline/runner.py:run_mode()` composition table:
-- **hourly** — batched quotes → prices (gated on marketState / newer regularMarketTime)
-- **daily** — overview → statements → market data → metrics → financial analysis
-- **backfill** — same order as daily, full-history fetch, metrics skipped
-- **calendar** — standalone Yahoo earnings + economic event sweep → `stock_economic_calendar` (tier-2 statement optimizer; also appended as a final daily phase)
+Entry: `src/main.py --phases <comma,list> --symbols <db|file|screener> [--full] [--force]` → `pipeline/runner.py:run_phases()`. Phase order in `--phases` is irrelevant — execution order is fixed in the runner:
+
+- `quote` — batched v7/quote → prices (gated on marketState / newer regularMarketTime)
+- `overview` / `statements` / `prices` / `dividends` / `splits` / `fa` / `fqs` — daily set (fa = financial analysis, fqs = quality score post-pass)
+- `calendar` / `exchange` — standalone sweeps, no symbol discovery (Yahoo earnings + economic events → `stock_economic_calendar`)
+
+Global flags: `--full` = full-history fetch (vs incremental from last stored date); `--force` = bypass freshness checks, re-pull everything.
 
 ### Commands
 
@@ -107,11 +109,11 @@ source .venv/bin/activate
 pip install -r requirements.txt          # .env needs DATABASE_URL
 
 # run pipeline
-python3 src/main.py --run hourly --symbols db            # hourly prices
-python3 src/main.py --run daily --symbols db             # full daily refresh
-python3 src/main.py --run backfill --symbols screener    # discovery + full backfill
-python3 src/main.py --run daily --symbols db --force     # correction mode
-python3 src/main.py --run calendar                       # earnings + economic event sweep
+python3 src/main.py --phases quote --symbols db                        # hourly prices
+python3 src/main.py --phases quote,overview,statements,prices,dividends,splits,fa,fqs,calendar --symbols db   # full daily set
+python3 src/main.py --phases overview,statements,prices,dividends,splits,fa,fqs --symbols screener --full   # discovery + full backfill
+python3 src/main.py --phases quote,overview,statements,prices,dividends,splits,fa,fqs,calendar --symbols db --force   # correction mode
+python3 src/main.py --phases calendar                                  # earnings + economic event sweep
 
 # tests
 python -m pytest tests/                  # unit + golden (live auto-excluded)
@@ -140,12 +142,12 @@ GitHub Actions in `.github/workflows/` (Python 3.14). Workflows are `workflow_di
 
 | Workflow | Schedule (pg_cron, UTC) | Command |
 |---|---|---|
-| `toolkit-stocks-hourly-prices.yml` | hourly :37 | `--run hourly --symbols db` |
-| `toolkit-stocks-daily.yml` | daily 08:23 | `--run daily --symbols db` + verify.py |
-| `toolkit-stocks-calendar.yml` | daily 06:47 | `--run calendar` (earnings/economic sweep) |
-| `toolkit-stocks-manual-backfill.yml` | manual only | `--run backfill --symbols screener` |
-| `tests.yml` (unit job) | push/PR (`toolkit-stocks/**`) | unit + golden tests |
-| `tests.yml` (live-smoke job) | daily 08:53 + manual dispatch | live smoke tests |
+| `toolkit-stocks-hourly.yml` | hourly :37 | `--phases quote --symbols db` |
+| `toolkit-stocks-daily.yml` | daily 08:23 | `--phases overview,statements,prices,dividends,splits,fa,fqs --symbols db` + verify.py |
+| `toolkit-stocks-calendar.yml` | daily 06:47 | `--phases calendar` (earnings/economic sweep) |
+| `toolkit-stocks-discover.yml` | manual only | `--phases overview,statements,prices,dividends,splits,fa,fqs --symbols screener --full` |
+| `toolkit-stocks-tests.yml` (unit job) | push/PR (`toolkit-stocks/**`) | unit + golden tests |
+| `toolkit-stocks-tests.yml` (live-smoke job) | daily 08:53 + manual dispatch | live smoke tests |
 
 Direct SQL maintenance jobs (pg_cron, no GitHub side):
 

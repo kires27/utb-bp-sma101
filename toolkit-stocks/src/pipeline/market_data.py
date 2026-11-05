@@ -52,13 +52,19 @@ def run_yf(ctx, stats):
 		"splits": RowFlusher(dbt.stock_split, SPLIT_FLUSH_SIZE) if want["splits"] else None,
 	}
 
+	# One batched freshness lookup for the whole run (was per-symbol: 1 query
+	# per symbol). Empty in --full mode, where history is fetched anyway.
+	latest_map: dict = {}
+	if not full:
+		latest_map = get_latest_dates(dbt.historical_price, [ctx.stock_ids[s] for s in targets])
+
 	def yf_market(sym):
 		stock_id = ctx.stock_ids[sym]
 		if full:
 			latest = None
 			period = PRICE_HISTORY_PERIOD
 		else:
-			latest = get_latest_dates(dbt.historical_price, [stock_id]).get(stock_id) or EPOCH
+			latest = latest_map.get(stock_id) or EPOCH
 			period = map_latest_yahoo_historical(latest) or PRICE_HISTORY_PERIOD
 		payload = yfs.history_payload(sym, period)
 		if payload is None:

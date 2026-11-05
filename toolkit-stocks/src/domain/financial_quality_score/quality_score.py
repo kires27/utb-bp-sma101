@@ -3,6 +3,39 @@ from .utils.sql import get_stock_ids_within_sector, get_financial_analysis, get_
 from .utils.func import normalize
 from datetime import date
 
+# Run-scoped caches: fqs processes every symbol in the universe, and peers
+# share sectors + fiscal dates, so the same peer set / FA block would be
+# re-fetched per symbol without these. Safe because fqs runs strictly after
+# fa finished writing (phase ordering guarantee) - data cannot go stale
+# mid-run. Cleared by reset_quality_cache() at the start of each fqs run.
+_sector_peers: dict[str, list[int]] = {}
+_sector_fa: dict[tuple[str, str, str], dict[int, dict]] = {}
+
+
+def reset_quality_cache():
+	'''Clear peer/FA caches (call once per fqs phase, before scoring).'''
+	_sector_peers.clear()
+	_sector_fa.clear()
+
+
+def _peers_for_sector(sector: str) -> list[int] | None:
+	if sector not in _sector_peers:
+		peer_ids = get_stock_ids_within_sector(sector)
+		if peer_ids is None:
+			return None		# fetch failed: don't cache, let caller handle empty
+		_sector_peers[sector] = peer_ids
+	return _sector_peers[sector]
+
+
+def _analyses_for(sector: str, fiscal_date: str, period: str) -> dict[int, dict]:
+	key = (sector, fiscal_date, period)
+	if key not in _sector_fa:
+		analyses = get_financial_analysis(_peers_for_sector(sector), fiscal_date, period)
+		if not analyses:
+			return {}		# not cached: a retry may succeed once fa rows land
+		_sector_fa[key] = analyses
+	return _sector_fa.get(key, {})
+
 
 def calculate_quality_score(
 	target_stock_id: int,
@@ -14,9 +47,7 @@ def calculate_quality_score(
 	Returns {stock_id, quality_score, category_scores}
 	"""
 	sector = get_stock_sector(target_stock_id)
-	peer_ids = get_stock_ids_within_sector(sector)
-
-	analyses = get_financial_analysis(peer_ids, fiscal_date, period)
+	analyses = _analyses_for(sector, str(fiscal_date), period)
 	if not analyses:
 		return {"stock_id": target_stock_id, "quality_score": None, "category_scores": {}, "median_comparison": None}
 
