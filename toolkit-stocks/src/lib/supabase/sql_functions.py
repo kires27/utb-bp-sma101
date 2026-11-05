@@ -371,13 +371,13 @@ def get_quarterly_fetch_ids(
 				cal=sql.Identifier(dbt.economic_calendar),
 				gap=gap_expr,
 			),
-			list(stock_ids) * len(statement_tables) + (
+			[list(stock_ids)] * 4 + [
 				EARNINGS_EVENT_LOOKAHEAD_DAYS, list(stock_ids),
 				# sweep branch params
 				QUARTERLY_SWEEP_WINDOW_DAYS, QUARTERLY_SWEEP_BUCKETS, sweep_bucket,
 				# stale-and-not-suppressed branch params
 				QUARTERLY_FISCAL_WINDOW_DAYS, MAX_SUPPRESSION_GAP_DAYS,
-			),
+			],
 		)
 		return {row[0] for row in cursor.fetchall()}
 	except Exception as err:
