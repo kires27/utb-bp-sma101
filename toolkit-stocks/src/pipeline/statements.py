@@ -29,7 +29,7 @@ STATEMENT_FLUSH_SIZE = 2000
 STATEMENT_CONFLICT_KEYS = ["stock_id", "fiscal_date", "period"]
 
 
-def fresh_symbols(ctx, db_table: str, targets: list[str]) -> set[str]:
+def fresh_symbols(ctx, db_table: str, targets: list[str], period_type: str) -> set[str]:
 	'''Symbols whose statement data is fresh enough to skip fetching.
 
 	Fresh = newest fiscal_date within FRESH_FISCAL_WINDOW_DAYS AND rows carry an
@@ -42,7 +42,7 @@ def fresh_symbols(ctx, db_table: str, targets: list[str]) -> set[str]:
 	stamped_ids = get_stamped_stock_ids(db_table, stock_ids)
 	fresh = {s for s in targets if ctx.stock_ids[s] in fresh_ids and ctx.stock_ids[s] in stamped_ids}
 	skipped = len(targets) - len(fresh)
-	printf(f"{db_table}: {skipped}/{len(targets)} symbols stale/unknown -> fetch", lv.INFO)
+	printf(f"{db_table} ({period_type}): {skipped}/{len(targets)} symbols stale/unknown -> fetch", lv.INFO)
 	return fresh
 
 
@@ -81,7 +81,7 @@ def quarterly_fetch_decision(
 	return True
 
 
-def quarterly_targets(ctx, db_table: str, targets: list[str]) -> list[str]:
+def quarterly_targets(ctx, db_table: str, targets: list[str], period_type: str) -> list[str]:
 	'''Quarterly fetch targets: stale-and-not-suppressed symbols, today's
 	revision-sweep shard, plus legacy NULL-stamp rows in this table
 	(refetched and stamped once).'''
@@ -93,7 +93,7 @@ def quarterly_targets(ctx, db_table: str, targets: list[str]) -> list[str]:
 		s for s in targets
 		if ctx.stock_ids[s] in fetch_ids or ctx.stock_ids[s] not in stamped_ids
 	]
-	printf(f"{db_table}: {len(needed)}/{len(targets)} symbols stale/unknown -> fetch", lv.INFO)
+	printf(f"{db_table} ({period_type}): {len(needed)}/{len(targets)} symbols stale/unknown -> fetch", lv.INFO)
 	return needed
 
 
@@ -117,12 +117,12 @@ def run_statements(ctx, finance_type: str, db_table: str, null_tolerance: float,
 		printf(f"{finance_type}: {'force' if force else 'full'} set, fetching all symbols", lv.INFO)
 		needed = targets
 	elif period_type == "annual":
-		fresh = fresh_symbols(ctx, db_table, targets)
+		fresh = fresh_symbols(ctx, db_table, targets, period_type)
 		needed = [s for s in targets if s not in fresh]
 		skipped_symbols = sorted(fresh)
 		stats["skipped_fresh"] = len(fresh)
 	else:
-		needed = quarterly_targets(ctx, db_table, targets)
+		needed = quarterly_targets(ctx, db_table, targets, period_type)
 		skipped_symbols = [s for s in targets if s not in needed]
 		stats["skipped_fresh"] = len(skipped_symbols)
 
