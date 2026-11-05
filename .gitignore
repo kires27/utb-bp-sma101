@@ -47,6 +47,7 @@ web/tests/results
 concept
 .vscode
 src/data_cache/
+toolkit-stocks/sql
 TODO.md
 log/
 .playwright-mcp
