@@ -5,6 +5,15 @@ from lib.functions.data_types import time_to_timestamptz
 from lib.module.printf import printf, level as lv
 
 
+QUOTE_DECIMALS = 2
+
+
+def _round_quote(value) -> float | None:
+	if value is None:
+		return None
+	return round(float(value), QUOTE_DECIMALS)
+
+
 def build_quote_row(symbol: str, stock_id: int, quote: dict) -> dict:
 	'''
 	quote: normalized {stock_price, market_cap, regular_market_change_percent,
@@ -21,8 +30,8 @@ def build_quote_row(symbol: str, stock_id: int, quote: dict) -> dict:
 			"maintenance_update": datetime.now(timezone.utc),
 			"stock_price": quote.get("stock_price"),
 			"market_cap": quote.get("market_cap"),
-			"regular_market_change_percent": quote.get("regular_market_change_percent"),
-			"regular_market_change": quote.get("regular_market_change"),
+			"regular_market_change_percent": _round_quote(quote.get("regular_market_change_percent")),
+			"regular_market_change": _round_quote(quote.get("regular_market_change")),
 			"currency": quote.get("currency"),
 		}
 

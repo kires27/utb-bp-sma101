@@ -2,6 +2,8 @@ import traceback
 
 from lib.module.printf import printf, level as lv
 
+DIVIDEND_DECIMALS = 6
+
 
 def _parse_date(raw):
 	if raw is None:
@@ -27,7 +29,7 @@ def build_dividend_rows(symbol: str, stock_id: int, events: list[dict], latest_d
 			if d is None or (latest_date is not None and d < str(latest_date)):
 				continue
 
-			amount = float(event["amount"])
+			amount = round(float(event["amount"]), DIVIDEND_DECIMALS)
 			if amount == 0:
 				# 0 dividend = source corruption (e.g. rounded pre-split value), never real
 				printf(f"{symbol}: skip zero dividend event on {d}", lv.WARNING)

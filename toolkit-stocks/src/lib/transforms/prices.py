@@ -13,6 +13,19 @@ def _clean(value) -> float | None:
 		return None
 
 
+PRICE_DECIMALS = 4
+
+
+def _round_price(value) -> float | None:
+	f = _clean(value)
+	return None if f is None else round(f, PRICE_DECIMALS)
+
+
+def _clean_int(value) -> int | None:
+	f = _clean(value)
+	return None if f is None else round(f)
+
+
 def build_price_rows(symbol: str, stock_id: int, rows_desc: list[dict], latest_date) -> list[dict]:
 	'''
 	Transform price history into DB rows, incremental: only dates on/after
@@ -20,6 +33,8 @@ def build_price_rows(symbol: str, stock_id: int, rows_desc: list[dict], latest_d
 
 	Rows are as-traded OHLCV; adjustment (dividends/splits) is derived on
 	read from stock_dividend + stock_split, not stored.
+	Prices are rounded to PRICE_DECIMALS — float64 sources carry binary
+	noise (e.g. 342.6700134277344) that pollutes the numeric columns.
 	'''
 	try:
 		if stock_id is None:
@@ -31,18 +46,18 @@ def build_price_rows(symbol: str, stock_id: int, rows_desc: list[dict], latest_d
 			if latest_date is not None and d < str(latest_date):
 				continue
 
-			close = _clean(row["close"])
+			close = _round_price(row["close"])
 			if close is None:
 				continue
 
 			rows.append({
 				"stock_id": stock_id,
 				"date": d,
-				"open": _clean(row.get("open")),
-				"high": _clean(row.get("high")),
-				"low": _clean(row.get("low")),
+				"open": _round_price(row.get("open")),
+				"high": _round_price(row.get("high")),
+				"low": _round_price(row.get("low")),
 				"close": close,
-				"volume": _clean(row.get("volume")),
+				"volume": _clean_int(row.get("volume")),
 			})
 
 		return rows
