@@ -1,6 +1,8 @@
 import time
 import traceback
 
+from yfinance.exceptions import YFRateLimitError
+
 from lib.functions.netstats import incr_yf
 from lib.module.printf import printf, level as lv
 
@@ -35,14 +37,12 @@ class QuotesBatchSource:
 
 	def _fetch_chunk(self, symbols: list[str]) -> list[dict]:
 		'''Raw quote records for one chunk, with backoff on rate limits.'''
-		import yfinance as yf
-
 		for attempt in range(MAX_RETRIES):
 			incr_yf()
 			try:
 				resp = self._data.get_raw_json(QUOTE_URL, params={"symbols": ",".join(symbols)})
 				return resp.get("quoteResponse", {}).get("result") or []
-			except yf.YFRateLimitError as err:
+			except YFRateLimitError as err:
 				wait = 2 ** attempt
 				printf(f"quotes_batch: rate limited, retry in {wait}s ({err})", lv.WARNING)
 				time.sleep(wait)

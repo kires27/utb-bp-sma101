@@ -18,15 +18,27 @@ def test_time_to_timestamptz_malformed_raises():
 
 
 def test_map_latest_yahoo_historical_ranges():
-	assert map_latest_yahoo_historical(date.today()) == "1D"
+	assert map_latest_yahoo_historical(date.today()) == "1d"
 	from datetime import timedelta
-	assert map_latest_yahoo_historical(date.today() - timedelta(days=1)) == "1D"
-	assert map_latest_yahoo_historical(date.today() - timedelta(days=3)) == "5D"
-	assert map_latest_yahoo_historical(date.today() - timedelta(days=30)) == "3M"
-	assert map_latest_yahoo_historical(date.today() - timedelta(days=100)) == "6M"
-	assert map_latest_yahoo_historical(date.today() - timedelta(days=300)) == "1Y"
-	assert map_latest_yahoo_historical(date.today() - timedelta(days=1000)) == "5Y"
+	assert map_latest_yahoo_historical(date.today() - timedelta(days=1)) == "1d"
+	assert map_latest_yahoo_historical(date.today() - timedelta(days=3)) == "5d"
+	assert map_latest_yahoo_historical(date.today() - timedelta(days=30)) == "3mo"
+	assert map_latest_yahoo_historical(date.today() - timedelta(days=100)) == "6mo"
+	assert map_latest_yahoo_historical(date.today() - timedelta(days=300)) == "1y"
+	assert map_latest_yahoo_historical(date.today() - timedelta(days=1000)) == "5y"
 	assert map_latest_yahoo_historical(date.today() - timedelta(days=3000)) is None
+
+
+def test_map_latest_yahoo_historical_periods_are_valid():
+	'''Every mapped period must be accepted by yfinance, else the symbol
+	fetches 0 rows forever and can never self-heal.'''
+	from lib.functions.data_types import PRICE_HISTORY_PERIOD
+	valid = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"}
+	for days in [0, 1, 2, 5, 6, 30, 91, 180, 181, 365, 366, 1825, 1826]:
+		from datetime import timedelta
+		period = map_latest_yahoo_historical(date.today() - timedelta(days=days))
+		assert period is None or period in valid
+	assert PRICE_HISTORY_PERIOD in valid
 
 
 def test_to_date():

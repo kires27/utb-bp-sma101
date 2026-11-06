@@ -23,17 +23,17 @@ def map_latest_yahoo_historical(db_date: datetime.date) -> str | None:
 	diff_days = (today - db_date).days
 
 	if diff_days <= 1:
-		return "1D"
+		return "1d"
 	elif diff_days <= 5:
-		return "5D"
+		return "5d"
 	elif diff_days <= 90:
-		return "3M"
+		return "3mo"
 	elif diff_days <= 180:
-		return "6M"
+		return "6mo"
 	elif diff_days <= 365:
-		return "1Y"
+		return "1y"
 	elif diff_days <= 1825:
-		return "5Y"
+		return "5y"
 	else:
 		return None
 

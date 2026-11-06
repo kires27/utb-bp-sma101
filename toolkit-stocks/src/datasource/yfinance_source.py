@@ -2,6 +2,8 @@ import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from yfinance.exceptions import YFRateLimitError
+
 from lib.functions.netstats import incr_yf
 from lib.module.printf import printf, level as lv
 
@@ -70,13 +72,11 @@ class YFinanceSource:
 
 	def with_backoff(self, symbol: str, fn, *args, **kwargs):
 		'''Call fn with exponential backoff on rate limit / transient errors.'''
-		import yfinance as yf
-
 		for attempt in range(MAX_RETRIES):
 			incr_yf()
 			try:
 				return fn(*args, **kwargs)
-			except yf.YFRateLimitError as err:
+			except YFRateLimitError as err:
 				wait = 2 ** attempt
 				printf(f"{symbol}: rate limited, retry in {wait}s ({err})", lv.WARNING)
 				time.sleep(wait)
