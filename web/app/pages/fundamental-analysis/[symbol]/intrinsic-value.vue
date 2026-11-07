@@ -30,7 +30,6 @@ const analysis = shallowRef(null)
 const pending = ref(false)
 const error = shallowRef(null)
 const { showToast } = useToast()
-const cappedNotified = ref(false)
 
 function blockPlus(e) {
 	if (e.key === '+') e.preventDefault()
@@ -42,6 +41,8 @@ function blockPlusPaste(e) {
 }
 
 async function fetchAnalysis() {
+	// DCF needs ≥3 FY cash flows — POST would just 400 with the same message
+	if (!enoughHistory.value) return
 	const validation = validateIntrinsicValueInputs({ ...inputs })
 	if (!validation.valid) {
 		showToast(Object.values(validation.errors)[0], { theme: "error" })
@@ -65,12 +66,6 @@ async function fetchAnalysis() {
 				},
 			}),
 		)
-
-		const actualHorizon = analysis.value?.projection_horizon
-		if (actualHorizon != null && inputs.projectionHorizon > actualHorizon && !cappedNotified.value) {
-			cappedNotified.value = true
-			showToast(`Only ${actualHorizon} years of cash flow data available`, { theme: "error" })
-		}
 	} catch (err) {
 		error.value = err
 	} finally {
@@ -93,12 +88,74 @@ watchDebounced(
 	},
 )
 
-watch(() => inputs.projectionHorizon, () => { cappedNotified.value = false })
-
 /** @type {boolean} */
 const upsidePos = computed(() => {
 	return analysis.value?.iv_upside[0] >= 0
 })
+
+// projection horizon is capped at the stock's real FY cash-flow count —
+// the user cannot project more years than data exists for
+const maxYears = ref(10)
+// the DCF needs the 3 newest FCFs — stocks with fewer FY statements
+// than that cannot compute an intrinsic value at all
+const enoughHistory = ref(true)
+
+async function fetchMaxYears() {
+	try {
+		const data = await cached(`iv-maxyears-${symbol.value}`, () =>
+			$fetch(API.stocks.get_intrinsic_value(symbol.value))
+		)
+		const available = data?.available_years ?? 10
+		// validator hard-caps at 10 — cap is the true min(available, 10),
+		// never inflated: a stock with 4 FY statements caps at 4
+		maxYears.value = Math.min(available, 10)
+		enoughHistory.value = available >= 3
+	} catch {
+		maxYears.value = 10
+		enoughHistory.value = true
+	}
+	// also covers the symbol-change case (cap may shrink)
+	if (inputs.projectionHorizon > maxYears.value) {
+		inputs.projectionHorizon = maxYears.value
+	}
+}
+
+onMounted(fetchMaxYears)
+watch(symbol, fetchMaxYears)
+
+// late-arriving cap (cache miss) — clamp immediately
+watch(maxYears, () => {
+	if (inputs.projectionHorizon > maxYears.value) {
+		inputs.projectionHorizon = maxYears.value
+	}
+})
+
+// market cap is display-only (model no longer uses it) — fetched from
+// stock_quote via the quote endpoint, cached per symbol
+const marketCap = shallowRef(null)
+
+async function fetchMarketCap() {
+	try {
+		const data = await cached(`iv-mcap-${symbol.value}`, () =>
+			$fetch(`${API.stocks.get_quote(symbol.value)}?select=market_cap`)
+		)
+		marketCap.value = data?.market_cap ?? null
+	} catch {
+		marketCap.value = null
+	}
+}
+
+onMounted(fetchMarketCap)
+watch(symbol, fetchMarketCap)
+
+function formatMarketCap(v) {
+	if (v == null) return "—"
+	return "$" + Number(v).toLocaleString("en-US", {
+		notation: "compact",
+		maximumFractionDigits: 2,
+	})
+}
+
 
 </script>
 
@@ -110,7 +167,7 @@ const upsidePos = computed(() => {
 
 		<div class="panel-header">
 			<Text variant="body">
-				Cash flow growth for last {{ analysis?.projection_horizon || "N" }} years
+				Cash flow growth for last {{ analysis?.agr_years || "N" }} years
 				has maintained a CAGR of
 				<strong style="color: var(--teal);">
 					{{ analysis?.annual_growth_rate?.[1] }}%
@@ -127,7 +184,7 @@ const upsidePos = computed(() => {
 
 		<div class="input-group">
 			<Text variant="label">Projection Horizon (YEARS)</Text>
-			<Input v-model.number="inputs.projectionHorizon" type="number" min="0" max="100" step="1" @keydown="blockPlus" @paste="blockPlusPaste" />
+			<Input v-model.number="inputs.projectionHorizon" type="number" min="3" :max="maxYears" step="1" :disabled="!enoughHistory" @keydown="blockPlus" @paste="blockPlusPaste" />
 			<Text variant="label">Growth Discount Rate (%)</Text>
 			<Input v-model.number="inputs.growthDiscount" type="number" min="0" max="100" step="0.5" @keydown="blockPlus" @paste="blockPlusPaste" />
 			<Text variant="label">Cash Flow Discount Rate (%)</Text>
@@ -148,14 +205,15 @@ const upsidePos = computed(() => {
 		</div>
 
 		<div class="result-row">
-			<Text variant="body">Market Price:</Text>
-			<Text variant="h3" v-if="analysis && !pending">
-				${{ analysis.market_cap[1] }}
+			<Text variant="body">Market Cap:</Text>
+			<Text variant="h3" v-if="marketCap != null">
+				{{ formatMarketCap(marketCap) }}
 			</Text>
 			<Text variant="h3" v-else-if="pending">...</Text>
 			<Text variant="h3" v-else-if="error" style="color: var(--rose)">
 				{{ error.data?.message || error.message || "Error fetching data" }}
 			</Text>
+			<Text variant="h3" v-else>—</Text>
 		</div>
 
 		<div class="result-grid">

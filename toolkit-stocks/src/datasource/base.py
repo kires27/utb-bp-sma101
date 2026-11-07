@@ -10,6 +10,7 @@ STATEMENT_FIELD_MAP: dict[str, list[str]] = {
 	"net_income": ["net_income", "net_income_common_stockholders"],
 	"operating_income": ["operating_income"],
 	"basic_average_shares": ["basic_average_shares"],
+	"diluted_average_shares": ["diluted_average_shares"],
 	"otherunder_preferred_stock_dividend": ["otherunder_preferred_stock_dividend"],
 	"total_assets": ["total_assets"],
 	"current_assets": ["current_assets"],
@@ -19,6 +20,9 @@ STATEMENT_FIELD_MAP: dict[str, list[str]] = {
 	"stockholders_equity": ["stockholders_equity"],
 	"retained_earnings": ["retained_earnings"],
 	"share_issued": ["share_issued"],
+	"ordinary_shares_number": ["ordinary_shares_number"],
+	"treasury_shares_number": ["treasury_shares_number"],
+	"preferred_shares_number": ["preferred_shares_number"],
 	"cash_cash_equivalents_and_short_term_investments": ["cash_cash_equivalents_and_short_term_investments"],
 	"total_debt": ["total_debt"],
 	"free_cash_flow": ["free_cash_flow"],
@@ -29,12 +33,13 @@ STATEMENT_FIELD_MAP: dict[str, list[str]] = {
 STATEMENT_FIELDS: dict[str, list[str]] = {
 	"income_statement": [
 		"total_revenue", "net_income", "gross_profit", "operating_income",
-		"basic_average_shares", "otherunder_preferred_stock_dividend",
+		"basic_average_shares", "diluted_average_shares", "otherunder_preferred_stock_dividend",
 	],
 	"balance_sheet": [
 		"total_assets", "current_assets", "total_liabilities_net_minority_interest",
 		"current_liabilities", "net_tangible_assets", "stockholders_equity",
-		"retained_earnings", "share_issued",
+		"retained_earnings", "share_issued", "ordinary_shares_number", "treasury_shares_number",
+		"preferred_shares_number",
 		"cash_cash_equivalents_and_short_term_investments", "total_debt",
 	],
 	"cash_flow": [

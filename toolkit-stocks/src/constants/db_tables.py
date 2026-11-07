@@ -9,6 +9,7 @@ dividend =			"stock_dividend"
 analysis =			"stock_financial_analysis"
 stock_split =		"stock_split"
 economic_calendar =	"stock_economic_calendar"
+fx_rate =			"fx_rate"
 
 # Tables carrying an updated_at stamp for freshness-based skipping.
 statement_tables =	{balance_sheet, cash_flow, income_statement}

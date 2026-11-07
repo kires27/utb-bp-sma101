@@ -25,7 +25,7 @@ jobs:
       - name: Run backfill
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python src/main.py --phases overview,statements,prices,dividends,splits,fa,fqs --symbols screener --full
+        run: python src/main.py --phases overview,statements,prices,dividends,splits,fx,fa,fqs --symbols screener --full
 
       - name: Upload run summary
         if: always()
@@ -41,7 +41,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           if [ -f run_summary.txt ]; then
-            python src/verify.py fa --log run_summary.txt
+            python src/verify.py quote --log run_summary.txt
           else
-            python src/verify.py fa
+            python src/verify.py quote
           fi

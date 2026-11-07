@@ -18,7 +18,6 @@ def _row(**overrides):
 		"zip": "95014",
 		"longName": "Apple Inc.",
 		"fullExchangeName": "NMS",
-		"currency": "USD",
 	}
 	profile.update(overrides)
 	return build_overview_row("AAPL", profile, None, {}, None)
@@ -41,21 +40,19 @@ def test_sector_industry_standard_mapping():
 
 def test_db_meta_wins_over_profile():
 	row = build_overview_row(
-		"AAPL", {}, [], {"name": "Old Name", "exchange": "OLD", "currency": "EUR"}, None
+		"AAPL", {}, [], {"name": "Old Name", "exchange": "OLD"}, None
 	)
 	assert row["name"] == "Old Name"
 	assert row["exchange"] == "OLD"
-	assert row["currency"] == "EUR"
 
 
 def test_yf_info_fallback_when_profile_and_db_empty():
 	row = build_overview_row(
 		"AAPL", {}, [], {},
-		{"longName": "Apple Inc.", "fullExchangeName": "NMS", "currency": "USD"},
+		{"longName": "Apple Inc.", "fullExchangeName": "NMS"},
 	)
 	assert row["name"] == "Apple Inc."
 	assert row["exchange"] == "NMS"
-	assert row["currency"] == "USD"
 
 
 def test_officers_fallback_chain():

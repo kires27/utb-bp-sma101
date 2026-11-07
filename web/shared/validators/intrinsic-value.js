@@ -37,10 +37,11 @@ export function validateIntrinsicValueInputs(inputs) {
 		errors.safetyMargin = 'Must be between 0 and 100'
 	}
 
-	// projectionHorizon: integer, 1–100
+	// projectionHorizon: integer, 3-10 (user-picked projection years;
+	// 3 = minimum FCFs the mean needs, canonical model uses 5)
 	if (String(projectionHorizon).includes('+')) { errors.projectionHorizon = 'Symbol + not allowed' }
-	if (!Number.isInteger(projectionHorizon) || projectionHorizon < 1 || projectionHorizon > 100) {
-		errors.projectionHorizon = 'Must be an integer between 1 and 100'
+	if (!Number.isInteger(projectionHorizon) || projectionHorizon < 3 || projectionHorizon > 10) {
+		errors.projectionHorizon = 'Must be an integer between 3 and 10'
 	}
 
 	if (Object.keys(errors).length > 0) {
@@ -51,7 +52,7 @@ export function validateIntrinsicValueInputs(inputs) {
 		growthDiscount: Number.isFinite(growthDiscount) ? Number(growthDiscount) : 0,
 		cashFlowDiscount: Number.isFinite(cashFlowDiscount) ? Number(cashFlowDiscount) : 0,
 		safetyMargin: Number.isFinite(safetyMargin) ? Number(safetyMargin) : 0,
-		projectionHorizon: Number.isInteger(projectionHorizon) ? Number(projectionHorizon) : 1,
+		projectionHorizon: Number.isInteger(projectionHorizon) ? Number(projectionHorizon) : 5,
 	}
 
 	return { valid: true, errors: {}, value: sanitized }

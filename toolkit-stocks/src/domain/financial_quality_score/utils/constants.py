@@ -41,7 +41,7 @@ GROUPS = {
         "weight": 0.25,
         "metrics": [
             "gross_margin", "operating_margin", "net_margin",
-            "return_on_equity", "earnings_per_share"
+            "return_on_equity"
         ]
     },
     "financial_stability": {
@@ -52,7 +52,7 @@ GROUPS = {
         "weight": 0.20,
         "metrics": [
             "revenue_growth", "gross_income_growth", "net_income_growth",
-            "retained_earning_growth", "revenues_per_share"
+            "retained_earning_growth"
         ]
     },
     "capital_discipline": {

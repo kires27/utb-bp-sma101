@@ -52,7 +52,7 @@ def _reset():
 
 def test_repo_config_loads():
 	config = load_config()
-	assert config["window_days"] == 14
+	assert config["window_days"] == 90
 	assert config["window_start"] and config["window_end"]
 	assert set(config["event_types"]) == {"earnings", "economic_event"}
 	earnings = config["event_types"]["earnings"]

@@ -1,5 +1,14 @@
 # Pracovní deník
 
+## 6.11.2026
+FX konverze FA metrik: nová fáze `fx` (Yahoo `{CCY}=X`, tabulka `fx_rate`, 19 párů vs USD) běží před `fa`; `pe_ratio`/`pb_ratio`/`assets_price` škálují statement-side hodnoty na trading měnu přes `fx_rate_for` (r(trading)/r(stmt)), chybějící kurz → NULL. `stock.statement_currency` (financialCurrency) nově plní overview fáze. Sloupce `from`/`to` jsou reserved words v Postgresu — zápisy jen přes RowFlusher.
+
+Market status badge: `stock_exchange` měl RLS bez žádných policy (neviditelné pro API role) — migrace přidává public SELECT policy + SELECT-only grants. Web: `getExchangeInfo()` v `#shared/query/stock.js`, endpoint `/api/stock/[symbol]` vrací `exchange_info`, client util `marketStatus.js` (open/closed přes IANA tz, „Updated 14:32“). Exchange seed rozšířen o lunch breaky (Tokyo, HKEX, Shanghai, KRX, SGX).
+
+Quality score currency fix: `earnings_per_share` a `revenues_per_share` vyňaty z GROUPS (nerovnávají se cross-currency), váhy re-distribuovány.
+
+Drobné: ceny zaokrouhleny na 4 dp, volume na int, quote 2 dp, dividenda 6 dp (float64 šum v numeric sloupcích; golden fixture regenerovány). Oprava fetch parametrů historie (`1D`→`1d`, `3M`→`3mo`, …) + `YFRateLimitError` import. `verify.py` zjednodušen na jeden `quote` mód (FA check zrušen), opraveno dvojité počítání no_q skipů a UTC/local date posun. Workflows (daily, discover) přeladěny na `fx` + nový verify mód. Web: intrinsic-value endpoint/page rozšířeny.
+
 ## 5.11.2026
 Přejmenování tabulek výkazů: `stock_balance_sheet` → `stock_statement_balance`, `stock_cash_flow` → `stock_statement_cash`, `stock_income_statement` → `stock_statement_income` (kire DB + `db_tables.py` + regenerované `web/app/types/database.types.ts`; nové `updated_at` sloupce, `stock_dividend.split_adjusted_on`).
 

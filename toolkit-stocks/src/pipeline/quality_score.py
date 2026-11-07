@@ -17,8 +17,8 @@ def run_quality_score(ctx):
 	targets = valid_symbols(ctx)
 	stats = new_phase("fqs", len(targets))
 
+	printf("-- quality score --", lv.INFO)
 	for symbol in targets:
-		printf(f"---- {symbol} QUALITY SCORE --", lv.INFO)
 		fqs = build_quality_score(ctx.stock_ids[symbol])
 		if not fqs:
 			count_symbol(stats, False, symbol)
@@ -28,7 +28,7 @@ def run_quality_score(ctx):
 			"stock_id": ctx.stock_ids[symbol],
 			"fiscal_date": fqs["fiscal_date"],
 			"period": fqs["period"],
-		})
+		}, label=f"{symbol} qs")
 		count_symbol(stats, True, rows=rows)
 
 	return stats

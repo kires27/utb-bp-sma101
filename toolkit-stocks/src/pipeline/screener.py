@@ -183,8 +183,6 @@ def _stock_row(quote: dict) -> dict:
 		row["name"] = name
 	if quote.get("fullExchangeName"):
 		row["exchange"] = quote["fullExchangeName"]
-	if quote.get("currency"):
-		row["currency"] = quote["currency"]
 	return row
 
 

@@ -10,7 +10,7 @@ def build_overview_row(symbol: str, profile: dict, officers: list[dict], db_meta
 	Map a normalized profile record to a stock-table row.
 
 	profile: DefeatBeta profile dict OR pre-normalized dict from yfinance info.
-	db_meta: existing {name, exchange, currency} from DB - wins over fallbacks,
+	db_meta: existing {name, exchange} from DB - wins over fallbacks,
 	keeps old values alive on upsert (omitted keys are not updated).
 	yf_info: optional yfinance info dict used as fallback for missing identity fields.
 
@@ -40,19 +40,21 @@ def build_overview_row(symbol: str, profile: dict, officers: list[dict], db_meta
 
 		name = db_meta.get("name") or profile.get("longName") or profile.get("shortName")
 		exchange = db_meta.get("exchange") or profile.get("fullExchangeName") or profile.get("exchange")
-		currency = db_meta.get("currency") or profile.get("currency")
 
 		if yf_info:
 			name = name or (yf_info.get("longName") or yf_info.get("shortName"))
 			exchange = exchange or (yf_info.get("fullExchangeName") or yf_info.get("exchange"))
-			currency = currency or yf_info.get("currency")
 
 		if name:
 			row["name"] = name
 		if exchange:
 			row["exchange"] = exchange
-		if currency:
-			row["currency"] = currency
+
+		# Reporting currency of the financial statements (yfinance
+		# financialCurrency), NOT the trading currency — differs for ADRs.
+		fin_ccy = profile.get("financialCurrency") or (yf_info or {}).get("financialCurrency")
+		if fin_ccy:
+			row["statement_currency"] = fin_ccy
 
 		return row
 	except Exception as err:

@@ -86,7 +86,7 @@ def run_yf(ctx, stats):
 			count_symbol(stats, False, symbol)
 			continue
 		if want["prices"]:
-			printf(f"---- {symbol} HISTORICAL PRICES --", lv.INFO)
+			printf(f"---- {symbol:<10} historical prices --", lv.INFO)
 			flushers["prices"].add(build_price_rows(symbol, payload["stock_id"], payload["price_rows"], payload["latest"]))
 		if want["dividends"]:
 			flushers["dividends"].add(build_dividend_rows(symbol, payload["stock_id"], payload["div_events"], payload["latest"]))

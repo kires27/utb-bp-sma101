@@ -8,7 +8,6 @@ export type Database = {
           address: string | null;
           city: string | null;
           country: string | null;
-          currency: string | null;
           description: string | null;
           employees: number | null;
           exchange: string | null;
@@ -20,6 +19,7 @@ export type Database = {
           name: string;
           phone_number: string | null;
           sector: string | null;
+          statement_currency: Database["public"]["Enums"]["currency"] | null;
           symbol: string;
           website: string | null;
           zip: string | null;
@@ -29,7 +29,6 @@ export type Database = {
           address?: string | null;
           city?: string | null;
           country?: string | null;
-          currency?: string | null;
           description?: string | null;
           employees?: number | null;
           exchange?: string | null;
@@ -41,6 +40,7 @@ export type Database = {
           name: string;
           phone_number?: string | null;
           sector?: string | null;
+          statement_currency?: Database["public"]["Enums"]["currency"] | null;
           symbol: string;
           website?: string | null;
           zip?: string | null;
@@ -49,7 +49,6 @@ export type Database = {
           address?: string | null;
           city?: string | null;
           country?: string | null;
-          currency?: string | null;
           description?: string | null;
           employees?: number | null;
           exchange?: string | null;
@@ -61,6 +60,7 @@ export type Database = {
           name?: string;
           phone_number?: string | null;
           sector?: string | null;
+          statement_currency?: Database["public"]["Enums"]["currency"] | null;
           symbol?: string;
           website?: string | null;
           zip?: string | null;
@@ -156,10 +156,12 @@ export type Database = {
       };
       stock_exchange: {
         Row: {
+          break_end_time: string | null;
+          break_start_time: string | null;
           close_time: string;
           country: string | null;
           created_at: string;
-          currency: string | null;
+          currency: Database["public"]["Enums"]["currency"] | null;
           exchange_code: string;
           id: number;
           long_name: string;
@@ -172,10 +174,12 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          break_end_time?: string | null;
+          break_start_time?: string | null;
           close_time: string;
           country?: string | null;
           created_at?: string;
-          currency?: string | null;
+          currency?: Database["public"]["Enums"]["currency"] | null;
           exchange_code: string;
           id?: never;
           long_name: string;
@@ -187,10 +191,12 @@ export type Database = {
           week_pattern?: string;
         };
         Update: {
+          break_end_time?: string | null;
+          break_start_time?: string | null;
           close_time?: string;
           country?: string | null;
           created_at?: string;
-          currency?: string | null;
+          currency?: Database["public"]["Enums"]["currency"] | null;
           exchange_code?: string;
           id?: never;
           long_name?: string;
@@ -340,7 +346,7 @@ export type Database = {
       };
       stock_quote: {
         Row: {
-          currency: string | null;
+          currency: Database["public"]["Enums"]["currency"] | null;
           maintenance_update: string;
           market_cap: number | null;
           regular_market_change: number | null;
@@ -351,7 +357,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
-          currency?: string | null;
+          currency?: Database["public"]["Enums"]["currency"] | null;
           maintenance_update: string;
           market_cap?: number | null;
           regular_market_change?: number | null;
@@ -361,7 +367,7 @@ export type Database = {
           stock_price?: number | null;
         };
         Update: {
-          currency?: string | null;
+          currency?: Database["public"]["Enums"]["currency"] | null;
           maintenance_update?: string;
           market_cap?: number | null;
           regular_market_change?: number | null;
@@ -621,6 +627,31 @@ export type Database = {
       };
     };
     Enums: {
+      currency:
+        | "USD"
+        | "CAD"
+        | "BRL"
+        | "GBP"
+        | "EUR"
+        | "CHF"
+        | "PLN"
+        | "NOK"
+        | "SEK"
+        | "DKK"
+        | "JPY"
+        | "HKD"
+        | "CNY"
+        | "TWD"
+        | "KRW"
+        | "INR"
+        | "AUD"
+        | "SGD"
+        | "TRY"
+        | "ILS"
+        | "QAR"
+        | "SAR"
+        | "ZAR"
+        | "MXN";
       statement_period: "Q1" | "Q2" | "Q3" | "Q4" | "FY" | "TTM";
     };
     CompositeTypes: {
@@ -737,6 +768,32 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      currency: [
+        "USD",
+        "CAD",
+        "BRL",
+        "GBP",
+        "EUR",
+        "CHF",
+        "PLN",
+        "NOK",
+        "SEK",
+        "DKK",
+        "JPY",
+        "HKD",
+        "CNY",
+        "TWD",
+        "KRW",
+        "INR",
+        "AUD",
+        "SGD",
+        "TRY",
+        "ILS",
+        "QAR",
+        "SAR",
+        "ZAR",
+        "MXN",
+      ],
       statement_period: ["Q1", "Q2", "Q3", "Q4", "FY", "TTM"],
     },
   },

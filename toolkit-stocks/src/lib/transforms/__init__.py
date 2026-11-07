@@ -3,7 +3,7 @@ from .statements import build_statement_rows
 from .events import build_dividend_rows, build_split_rows
 from .prices import build_price_rows
 from .quotes import build_quote_row
-from .financial_analysis import build_financial_analysis
+from .financial_analysis import build_financial_analysis, make_fx_lookup
 from .quality_score import build_quality_score
 
 # noqa: F401

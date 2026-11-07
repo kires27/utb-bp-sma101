@@ -3,18 +3,21 @@
 Run as a separate CI step after the pipeline. Exits non-zero on any failed check
 so the workflow goes red and GitHub sends the failure email.
 
-Usage: python src/verify.py prices-quotes | fa
+Usage: python src/verify.py quote [--log run_summary.txt]
 """
 import argparse
 import sys
 from datetime import date, datetime
 
+from dotenv import load_dotenv
+
 from lib.module.printf import printf, level as lv
 from lib.supabase.init import get_connection
 import constants.db_tables as dbt
 
+load_dotenv()
+
 MAX_PRICE_AGE_DAYS = 4		# EOD data, weekends/holidays tolerated
-MAX_FA_AGE_DAYS = 40		# annual data, quarterly refresh cadence tolerated
 MAX_FAILED_RATIO = 0.02		# >2% of symbols failed -> suspicious
 MIN_ROWS = 1				# a healthy run always writes something
 # Phases whose 0-row runs are healthy: quote is marketState-gated (closed
@@ -26,7 +29,11 @@ MIN_ROWS_PHASE_EXEMPT = {"quote", "calendar", "overview"}
 
 def days_since(d: date) -> int:
 	if isinstance(d, datetime):
-		d = d.date()	# timestamptz (maintenance_update) arrives as datetime
+		# timestamptz (maintenance_update) arrives as tz-aware datetime; convert
+		# to local before .date() so the calendar date matches date.today().
+		# Comparing UTC date vs local date is off by one between local midnight
+		# and UTC midnight (e.g. 00:00-01:00 CET).
+		d = d.astimezone().date() if d.tzinfo else d.date()
 	return (date.today() - d).days
 
 
@@ -51,10 +58,15 @@ def check_failed_ratio(stats: dict) -> tuple[bool, str]:
 		return False, "no symbols processed at all"
 	skipped = stats.get("skipped_fresh", 0)
 	no_q = stats.get("skipped_no_q", 0)
-	failed = total - ok - skipped - no_q		# fresh skips fetched nothing, no-quarterly are data-availability skips
+	# skipped_fresh symbols fetched nothing (not failures); no_q symbols are
+	# data-availability skips ALREADY counted inside symbols_ok by
+	# statements.py (count_symbol(True) alongside skipped_no_q) — subtracting
+	# no_q again double-counts and produced negative failed counts.
+	failed = max(0, total - ok - skipped)
 	ratio = failed / total
 	ok_flag = ratio <= MAX_FAILED_RATIO
-	extra = f" first: {', '.join(stats.get('failed_symbols', []))}" if failed else ""
+	failed_syms = stats.get("failed_symbols", [])
+	extra = f" first: {', '.join(failed_syms)}" if failed and failed_syms else ""
 	skip_str = f" skipped_fresh={skipped}" if skipped else ""
 	no_q_str = f" no_q={no_q}" if no_q else ""
 	msg = f"symbols: ok={ok}/{total} failed={failed} ({ratio:.1%}, limit {MAX_FAILED_RATIO:.0%}){skip_str}{no_q_str}{extra}"
@@ -91,17 +103,12 @@ def run(mode: str, log_path: str | None) -> int:
 	cursor = conn.cursor()
 	failures = []
 
-	if mode == "--prices-quotes":
+	if mode == "quote":
 		for table in (dbt.historical_price, dbt.quote):
 			ok, msg = check_freshness(cursor, table, "date" if table == dbt.historical_price else "maintenance_update", MAX_PRICE_AGE_DAYS)
 			printf(msg, lv.INFO if ok else lv.ERROR)
 			if not ok:
 				failures.append(msg)
-	elif mode == "--fa":
-		ok, msg = check_freshness(cursor, dbt.analysis, "maintenance_update", MAX_FA_AGE_DAYS)
-		printf(msg, lv.INFO if ok else lv.ERROR)
-		if not ok:
-			failures.append(msg)
 
 	cursor.close()
 	conn.close()
@@ -136,7 +143,7 @@ def run(mode: str, log_path: str | None) -> int:
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description="Post-run pipeline verification")
-	parser.add_argument("mode", choices=["prices-quotes", "fa"])
+	parser.add_argument("mode", choices=["quote"])
 	parser.add_argument("--log", help="path to pipeline log file with PHASE summary lines")
 	args = parser.parse_args()
 	sys.exit(run(args.mode, args.log))

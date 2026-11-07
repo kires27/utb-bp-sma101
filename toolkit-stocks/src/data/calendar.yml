@@ -5,7 +5,11 @@
 #
 # window_days is the lookahead window fetched on each sweep. Yahoo caps page
 # size at 100; MAX_PAGES in the source caps pagination per (region, type).
-window_days: 14
+# 90d (not the old 14d) so future earnings dates exist early enough for the
+# quarterly fetch suppression to actually fire — suppression needs an event
+# > 7d out, and a 14d sweep left only a 7d suppression window (11/198 symbols
+# had a future event -> stale symbols were refetched daily).
+window_days: 90
 event_types:
   earnings:
     entity_id_type: sp_earnings

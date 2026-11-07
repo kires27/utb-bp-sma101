@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 
 from lib.functions.stats import new_phase, summary_line
 from verify import MAX_FAILED_RATIO, days_since, check_failed_ratio, parse_phase_lines
@@ -12,7 +12,10 @@ def test_days_since_with_date():
 def test_days_since_with_timestamptz_datetime():
 	# Regression: maintenance_update arrives from psycopg2 as tz-aware
 	# datetime; date.today() - datetime raises TypeError without coercion.
-	aware = datetime.now(timezone.utc) - timedelta(days=2)
+	# Use local tz (not UTC): verify.py compares against local date.today(),
+	# and a UTC-based stamp is off by one between local midnight and UTC
+	# midnight (e.g. 00:00-01:00 CET).
+	aware = datetime.now().astimezone() - timedelta(days=2)
 	assert days_since(aware) == 2
 
 
@@ -63,6 +66,19 @@ def test_check_failed_ratio_all_skipped_lists_no_failures():
 	})
 	assert ok
 	assert "skipped_fresh=198" in msg
+
+
+def test_check_failed_ratio_no_q_subsumed_in_ok():
+	# Regression: statements.py counts no-quarterly symbols as ok AND bumps
+	# skipped_no_q; verify.py subtracted no_q again -> failed=-42.
+	ok, msg = check_failed_ratio({
+		"symbols_total": 198, "symbols_ok": 91, "skipped_fresh": 107,
+		"skipped_no_q": 42,
+	})
+	assert ok
+	assert "failed=0" in msg
+	assert "no_q=42" in msg
+	assert "first:" not in msg		# no failures -> no first-list tail
 
 
 def test_check_failed_ratio_at_threshold():

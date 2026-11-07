@@ -9,17 +9,19 @@ function calculateNetIncome(income, dividends, shares) {
 /**
  * intrinsic value without margin of safety.
  * returns dictionary with analysis.
- * @param {number} price newest (closing) price
- * @param {number} marketCap newest
+ * @param {number} priceToFcf peer/industry median P/FCF (resolved by the endpoint)
+ * @param {number} stockPrice newest (closing) price
  * @param {number} cashAndEquivalents from newest balance sheet
  * @param {number} shareIssued from newest balance sheet
  * @param {object[]} cashFlow list of statements (newest first)
  * @param {number} growthRateDiscount growth rate
  * @param {number} futureDiscountRate Discount for future free cash flow and terminal value.
+ * @param {number} safetyMargin margin of safety
+ * @param {number} projection projected years (user input, 3-10)
  * @returns {object}
  */
 export default function calculateIntrinsicValue(
-	marketCap,
+	priceToFcf,
 	stockPrice,
 	cashAndEquivalents,
 	shareIssued,
@@ -27,6 +29,7 @@ export default function calculateIntrinsicValue(
 	growthRateDiscount,
 	futureDiscountRate,
 	safetyMargin,
+	projection,
 ) {
 	const grdDecimal = 1 - growthRateDiscount / 100;
 	const fdrDecimal = 1 + futureDiscountRate / 100;
@@ -36,17 +39,23 @@ export default function calculateIntrinsicValue(
 	// const dates = cashFlow.map((item) => item["fiscal_date"].split("-")[0]);
 
 	/** free cash flows from newest to oldest */
-	const { dates, values: fcfs } = freeCashFlows(cashFlow);
-	const projection = fcfs.length;
+	const fcfs = freeCashFlows(cashFlow).values;
 
-	const agr = annualGrowthRate(fcfs);
+	// normalizedFreeCashFlow needs the 3 newest FCFs; null values are
+	// filtered out by freeCashFlows, so the history can end up thinner
+	// than the requested horizon
+	if (fcfs.length < 3) {
+		throw createError({ statusCode: 400, statusMessage: 'Not enough free cash flow history' })
+	}
+
+	const agr = annualGrowthRate(fcfs.slice(0, 6));
+	const agrYears = Math.min(fcfs.length, 6) - 1; // true span: periods used for CAGR
 	const dagr = agr * grdDecimal;
 
 	const nfcf = normalizedFreeCashFlow(fcfs);
 	const ffcfs = futureFreeCashFlows(nfcf, projection, dagr);
 
-	const pfcf = priceToFreeCashFlow(marketCap, fcfs[0]);
-	const ter = ffcfs.at(-1) * pfcf;
+	const ter = ffcfs.at(-1) * priceToFcf;
 
 	const dffcfs = discountedFutureFreeCashFlows(ffcfs, projection, fdrDecimal);
 	const dffcfSum = dffcfs.reduce((acc, v) => acc + v, 0);
@@ -60,12 +69,12 @@ export default function calculateIntrinsicValue(
 	const ivpspd = ((ivps - stockPrice) / stockPrice) * 100
 
 	return {
-		"stock_price": stockPrice,
-		"market_cap": [
-			marketCap,
-			roundAnyNumber(marketCap, 2)
+		"stock_price": [
+			stockPrice,
+			roundAnyNumber(stockPrice, 2)
 		],
 		"projection_horizon": projection,
+		"agr_years": agrYears,
 		"annual_growth_rate": [
 			agr * 100,
 			roundAnyNumber(agr * 100, 1)
@@ -132,7 +141,7 @@ function freeCashFlows(cashFlow, index = 0, holder = { dates: [], values: [] }) 
  * @returns {number}
  */
 function annualGrowthRate(fcfs) {
-	const periods = fcfs.length;
+	const periods = fcfs.length - 1;
 	const first = fcfs[0];
 	const last = fcfs.at(-1);
 
@@ -147,8 +156,8 @@ function annualGrowthRate(fcfs) {
  * @returns {number}
  */
 function normalizedFreeCashFlow(fcfs) {
-	const sum = fcfs.reduce((acc, v) => acc + v, 0);
-	return sum / fcfs.length;
+	// mean of the 3 newest FCFs (Excel: (C84+D84+E84)/3)
+	return (fcfs[0] + fcfs[1] + fcfs[2]) / 3;
 }
 
 /**
@@ -169,15 +178,6 @@ function futureFreeCashFlows(fcf, lfcfs, dagr, holder = []) {
 		[...holder, dfcf]
 	);
 }
-
-/**
- * TODO FCF newest value - must be average across industry
- * @param {number} marketCap market cap
- * @param {number} fcf newest free cash flow
- */
-function priceToFreeCashFlow(marketCap, fcf) {
-	return marketCap / fcf;
-};
 
 /**
  * @param {number[]} ffcfs future free cash flows

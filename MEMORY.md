@@ -5,6 +5,7 @@
 - Work-log: Czech, newest-first, one feature per day.
 
 # Decisions
+- Market status badge DONE (2026-11-06): `stock_exchange` had RLS but ZERO policies (invisible to API roles) + full DML grants on anon/authenticated. Migration `toolkit-stocks/sql/2026-11-06_stock_exchange_read_policy.sql` (applied via MCP): public SELECT policy, grants tightened to SELECT-only. Web: `getExchangeInfo()` in `#shared/query/stock.js`; `server/api/stock/[symbol].get.js` returns `exchange_info` + Cache-Control 86400. Client `web/app/utils/marketStatus.js`: `getMarketStatus` (exchange IANA tz via Intl, week_pattern scan), `formatUpdatedAt` = "Updated 14:32" / "Updated 5 Nov, 14:32" (user: no elapsed time). No holiday/lunch-break data: may show open on holidays.
 - Exchange module DONE (2026-11-01): `--run exchange` seeds `stock_exchange` table (id, exchange_code UNIQUE, mic, short_name, long_name, country, timezone, open_time, close_time, week_pattern, currency) from static seed `src/data/exchanges.py` (37 rows, idempotent upsert). **Decision: keep hand-written static seed, no exchange_calendars dependency** — user explicitly declined runtime derivation/verification. yfinance has no exchange-hours API, so times come from AI knowledge (some rows best-guess, unverified: Oslo, B3, TASE, Doha, Qatar/Saudi). Coverage check warns on unmapped exchanges. Pre/post session columns dropped (lean). Holidays table = future.
 - adj_close REMOVED (2026-10-26): column dropped from `stock_historical_price` + all code. Prices = pure as-traded OHLCV; adjustment derived on read from `stock_dividend` + `stock_split` when needed (formula: close × Π splits/divs after date). Consequence: DefeatBeta fine as primary for historical prices. Price chart = split-adjusted OHLC derived on read; adj series only for total return. Dividends stay yfinance-primary (full precision; DefeatBeta rounds 2dp).
 - `--force` market data (2026-10-26, `PLAN-force-rewrite-market-data.md`): full-history rewrite via upsert (`conflict_keys` → DO UPDATE, passed only when forced); without force = incremental append. Force couples all three phases (dividends/splits/prices). PLAN-split-trigger-recalc.md still needed: dividend re-basing on new split + derive-on-read prices.
@@ -18,6 +19,7 @@
 - fqs phase (2026-11-02): quality score split from fa into own phase, runs strictly after `fa`. `build_financial_analysis` must NEVER write `quality_score` key (upsert would NULL it and wipe prior scores). `run_quality_score` loops targets, `build_quality_score` per symbol, one upsert `{quality_score, median_comparison}`. Peer data now fresh across the whole run (old code scored each symbol right after its own row write). Independently runnable for score-only reruns.
 
 # Gotchas & Lessons
+- `fetch` is a reserved word in Postgres (same class as `from`/`to`): CTE named `fetch` errors with syntax error at 42P01. Rename (used `qf` in `get_quarterly_fetch_ids`).
 - Kire (`kwpzvlymmaczaixtjdbu`) = live SMA DB (web target); halite = older copy, do not write. Web writes need `SUPABASE_SECRET_KEY` → `useSupabaseAdmin`.
 - Yahoo's displayed OHLC is split-adjusted (volume too); `Adj Close` = split+dividend; as-traded needs `auto_adjust=False`.
 - Raw close immutable (write-once); adj values shift on every new event → stored adj columns always stale, hence derive-on-read.
@@ -25,6 +27,7 @@
 - Virtual fields (`price_age_seconds`, `stale`) computed post-query in `metric/[symbol].get.js`, stripped from `?select=`.
 - PostgREST: after migration, `NOTIFY pgrst, 'reload schema'`.
 - `test_intrinsic_value.py` xfail: stale golden (163.43 vs 54.56); re-check expected.
+- Adding an export to `#shared/*.js` while Nuxt dev runs: stale `.nuxt/dev` bundle throws "does not provide an export named X". Fix: stop dev, `rm -rf .nuxt`, restart.
 - CI workflows at repo root `.github/workflows/`.
 
 # Open threads

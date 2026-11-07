@@ -134,9 +134,9 @@ source .venv/bin/activate
 
 # Phases (the only CLI surface; order in --phases irrelevant)
 python3 src/main.py --phases quote --symbols db                          # batched v7/quote, marketState-gated
-python3 src/main.py --phases quote,overview,statements,prices,dividends,splits,fa,fqs,calendar --symbols db   # full daily set
-python3 src/main.py --phases overview,statements,prices,dividends,splits,fa,fqs --symbols screener --full   # manual: screener discovery + full history
-python3 src/main.py --phases quote,overview,statements,prices,dividends,splits,fa,fqs,calendar --symbols db --force   # correction mode: re-pull everything
+python3 src/main.py --phases quote,overview,statements,prices,dividends,splits,fx,fa,fqs,calendar --symbols db   # full daily set
+python3 src/main.py --phases overview,statements,prices,dividends,splits,fx,fa,fqs --symbols screener --full   # manual: screener discovery + full history
+python3 src/main.py --phases quote,overview,statements,prices,dividends,splits,fx,fa,fqs,calendar --symbols db --force   # correction mode: re-pull everything
 
 # Tests
 python -m pytest tests/              # unit + golden (live auto-excluded via addopts)
@@ -156,9 +156,9 @@ Full test suite is done; test plan file deleted. Repo roadmap: `PLAN-rewrite-too
 Workflows in `.github/workflows/` (repo root), Python 3.14. All scheduling lives in **Supabase pg_cron** (jobs `gh-dispatch-*` call the GitHub `workflow_dispatch` API using the `github_pat` Vault secret) — workflows themselves have **no `on: schedule`** triggers. Times are UTC (pg_cron), offset from minute 0 to avoid GitHub scheduler congestion.
 
 - `toolkit-stocks-hourly.yml` — `--phases quote --symbols db` every hour :37.
-- `toolkit-stocks-daily.yml` — `--phases overview,statements,prices,dividends,splits,fa,fqs --symbols db` daily 08:23 UTC (`DATABASE_URL` secret) + verify.py. No quote (hourly owns it), no calendar (standalone owns it).
+- `toolkit-stocks-daily.yml` — `--phases overview,statements,prices,dividends,splits,fx,fa,fqs --symbols db` daily 08:23 UTC (`DATABASE_URL` secret) + verify.py. No quote (hourly owns it), no calendar (standalone owns it).
 - `toolkit-stocks-calendar.yml` — `--phases calendar` daily 06:47 UTC (earnings + economic event sweep → `stock_economic_calendar`).
-- `toolkit-stocks-discover.yml` — `--phases overview,statements,prices,dividends,splits,fa,fqs --symbols screener --full` (manual dispatch; verify.py `--fa`). Insert-only universe expansion: screener returns only NEWLY inserted symbols as backfill queue; existing stocks never touched.
+- `toolkit-stocks-discover.yml` — `--phases overview,statements,prices,dividends,splits,fx,fa,fqs --symbols screener --full` (manual dispatch; verify.py `--fa`). Insert-only universe expansion: screener returns only NEWLY inserted symbols as backfill queue; existing stocks never touched.
 - `toolkit-stocks-tests.yml` — unit+golden on push/PR (path-filtered to `toolkit-stocks/**`), live smoke daily 08:53 UTC via dispatch + `workflow_dispatch`.
 - `cron-run-details-cleanup` (pg_cron, no GitHub side) — purges `cron.job_run_details` >7 days, 03:00 UTC.
 - `purge-old-calendar-events` (pg_cron, no GitHub side) — purges `stock_economic_calendar` rows with `event_datetime` older than 6 months, 03:10 UTC.
@@ -169,9 +169,11 @@ Monitor dispatches: `cron.job_run_details` (did the job fire) + `net._http_respo
 
 `src/main.py` — parses `--phases <comma,list> --symbols <db|file|screener>` (+ `--force`, `--full` global) and hands off to `pipeline/runner.py:run_phases()`, which executes each selected phase in fixed dependency order:
 
-- `quote` — `pipeline/prices.py`: batched v7/quote (≤500/call via `datasource/quotes_batch.py`), marketState-gated writes (REGULAR/POST, or newer `regular_market_time` than stored) to `stock_quote`. Covers everything the deleted per-symbol `metrics` phase did. `market_cap` provenance: own calc (price × latest filing `share_issued` from `stock_statement_balance`, quarterly preferred over FY at same date) primary; Yahoo marketCap only as fallback when own inputs missing. Divergence >2% vs Yahoo logs a WARNING (log-only). Japan caveat: issued includes treasury until cancellation → slight overstatement during buybacks.
-- `overview`/`statements`/`prices`/`dividends`/`splits`/`fa`/`fqs` — `RunContext` phases in fixed order; statements run all three tables (balance/cash/income) internally; prices/dividends/splits share one history payload per symbol, writes gated per flag by `market_data._want()`; `fqs` upserts `quality_score` into `stock_financial_analysis` after all FA rows are written (peer normalization reads fresh data; FA itself never writes the score).
-- `calendar`/`exchange` — standalone, no symbol discovery (skip when phase list is only these).
+- `quote` — `pipeline/prices.py`: batched v7/quote (≤500/call via `datasource/quotes_batch.py`), marketState-gated writes (REGULAR/POST, or newer `regular_market_time` than stored) to `stock_quote`. Covers everything the deleted per-symbol `metrics` phase did. `market_cap` provenance: own calc (price × latest filing shares outstanding from `stock_statement_balance` — `COALESCE(ordinary_shares_number, share_issued − treasury, issued)`, quarterly preferred over FY at same date, rebased by `stock_split` factors dated after the filing's `fiscal_date`; shares ≤ 0 treated as invalid → Yahoo fallback) primary; Yahoo marketCap only as fallback when own inputs missing. Divergence >2% vs Yahoo logs a WARNING (log-only), EXCEPT when the own/yahoo ratio snaps to a clean ADR fraction (±1%, `ADR_RATIOS` in prices.py) — that is a share-basis mismatch (ADR price × ordinary shares); own is then corrected by the derived ratio and stays primary. Japan caveat: issued includes treasury until cancellation → slight overstatement during buybacks (fixed for filers reporting `Treasury Shares Number`; legacy rows fall back to issued). `preferred_shares_number` is stored but NEVER subtracted: Yahoo quarterly payloads sometimes carry dollar values in the count field (RY.TO = C$14B), US filers (DLR) report preferred outside issued (double-count), and Yahoo backfills the current count onto historical rows (not as-filed). Samsung-class KR filers stay chronic: Yahoo counts the merged common+preferred basis for KR while quarterly filings report common-only (~0.89 ratio, accepted).
+- `overview`/`statements`/`prices`/`dividends`/`splits`/`fx`/`fa`/`fqs` — `RunContext` phases in fixed order; statements run all three tables (balance/cash/income) internally; prices/dividends/splits share one history payload per symbol, writes gated per flag by `market_data._want()`; `fx` backfills/refreshes `fx_rate` (runs before `fa`); `fqs` upserts `quality_score` into `stock_financial_analysis` after all FA rows are written (peer normalization reads fresh data; FA itself never writes the score).
+- `overview` fetches yfinance profiles only for symbols whose `stock.maintenance_update` is older than `OVERVIEW_MAX_AGE_DAYS` (7) — the stamp moves only when overview actually writes (Python-side diff: stored row prefetched via `get_stock_overview_rows`, only changed cells + fresh stamp are written, identical profiles skipped). The `suppress_redundant_updates` DB trigger was dropped (`sql/2026-11-07_drop_stock_suppress_trigger.sql`). `--force`/`--full` bypass.
+- Quarterly statement gating: stale-and-not-suppressed symbols go through a stagger shard (`QUARTERLY_STAGGER_BUCKETS = 3`, 1/3 per day) instead of fetching daily; unknown symbols (no rows) always fetch immediately. `calendar.yml` `window_days: 90` feeds the earnings-event suppression.
+- `calendar`/`exchange`/`fx` — standalone, no symbol discovery (skip when phase list is only these).
 - `--full` = full-history fetch (read by prices/statements); `--force` = bypass freshness, re-pull all.
 
 Symbol discovery: `db` (already in `stock`), `file` (`data/symbols.py` manual list), `screener` (YAML config → EquityQuery, paginated 250/page, insert-only into `stock`; returns only newly inserted symbols = backfill queue for this run).
@@ -193,6 +195,7 @@ src/
     context.py                      RunContext — passive shared state (symbols, stock_ids, meta, yfs)
     prices.py                       quote phase (v7/quote batch, marketState gating) → stock_quote
     screener.py                     discovery: screener.yml → EquityQuery → paginated screen(), insert-only
+    fx.py                           fx phase — {CCY}=X backfill/refresh into fx_rate (19 non-USD pairs)
     overview.py, statements.py, market_data.py, financial_analysis.py,
     quality_score.py                fqs phase (quality score upsert, after fa)
   lib/                              support code (no domain logic)
@@ -238,6 +241,8 @@ Flow: sector (broad field) → get peer IDs → fetch their financial analysis a
 - Metric columns: `gross_margin`, `operating_margin`, `net_margin`, `return_on_equity`, `earnings_per_share`, `debt_to_equity`, `debt_growth`, `current_ratio`, `revenue_growth`, `gross_income_growth`, `net_income_growth`, `retained_earning_growth`, `revenues_per_share`, `capital_index`, `payback_period`, `assets_price`, `pe_ratio`, `pb_ratio`, `dividend_yield`.
 - `stock` table has `industry` + `sector` columns (populated by the overview phase). Standard GICS convention: `sector` = broad (Technology, Healthcare, ...) and is the peer-group field for FA medians (`get_all_medians` RPC, param `p_stock_sector`) + quality score; `industry` = fine-grained (Consumer Electronics, ...).
 - `stock_quote` table stores real-time price/market-cap (updated per run).
+- `fx_rate` table: daily FX rates for FA currency-mismatch fix, one row per currency vs USD (`(from, to, rate_date)` PK, `rate` = CCY per 1 USD from Yahoo `{CCY}=X`). FA converts statement-side numbers to trading ccy at compute time: `rate(stmt→trading) = r(trading)/r(stmt)`. **GOTCHA: `"from"` and `"to"` are reserved words in Postgres** — writes MUST go through `RowFlusher`/`insert_rows_bulk` (quotes every column via `sql.Identifier`); NEVER use `query_insert`/`query_upsert` for fx_rate (they interpolate column names raw). RLS with public read policy.
+- FA currency conversion: `pe_ratio`/`pb_ratio`/`assets_price` scale statement args (EPS, equity, NTA, liabilities) by the stmt→trading rate in `lib/transforms/financial_analysis.py` (`fx_rate_for` + `stmt_side`); missing rate → NULL for those three columns. Other metrics are ccy-pure (same-ccy ratios) and untouched; `dividend_yield` untouched (Yahoo-reported amounts). Statement rows stay in statement ccy — `stock.statement_currency` (overview phase) labels them.
 
 ## Conventions
 

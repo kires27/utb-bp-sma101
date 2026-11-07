@@ -136,6 +136,27 @@ class YFinanceSource:
 
 		return self.with_backoff(symbol, fetch, self._ticker(symbol))
 
+	def fx_history(self, ccy: str, period: str = "max") -> dict | None:
+		'''Daily FX history for one currency vs USD, via Yahoo's {CCY}=X ticker.
+		Convention is uniform across the series: Close = units of CCY per 1 USD
+		(JPY=X -> 158, EUR=X -> 0.897), so the raw value IS the stored rate.
+		Returns {date_str: rate} or None. period "max" backfills years; "1y"
+		refreshes an already-backfilled pair with one request.'''
+		def fetch(ticker):
+			df = ticker.history(period=period, interval="1d", auto_adjust=False)
+			if df is None or df.empty:
+				return None
+			rates: dict[str, float] = {}
+			for idx, row in df.iterrows():
+				d = str(idx.date() if hasattr(idx, "date") else idx)[:10]
+				close = row.get("Close")
+				if close is None or float(close) <= 0:
+					continue
+				rates[d] = float(close)
+			return rates or None
+
+		return self.with_backoff(f"{ccy}=X", fetch, self._ticker(f"{ccy}=X"))
+
 	def statements(self, symbol: str, kind: str, period: str = "annual") -> object | None:
 		'''
 		kind: income_statement | balance_sheet | cash_flow

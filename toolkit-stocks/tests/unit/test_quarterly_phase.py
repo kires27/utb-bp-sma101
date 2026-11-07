@@ -52,7 +52,7 @@ def _fakes(monkeypatch):
 		stamped_ids=set(),
 		fresh_ids=set(),
 	)
-	monkeypatch.setattr(ps, "get_quarterly_fetch_ids", lambda tables, ids, bucket: fake_sql.quarterly_fetch_ids)
+	monkeypatch.setattr(ps, "get_quarterly_fetch_ids", lambda tables, ids, bucket: (fake_sql.quarterly_fetch_ids, {}))
 	monkeypatch.setattr(ps, "get_stamped_stock_ids", lambda table, ids: fake_sql.stamped_ids)
 	monkeypatch.setattr(ps, "get_fresh_stock_ids", lambda table, ids, cutoff: fake_sql.fresh_ids)
 	monkeypatch.setattr(ps, "touch_statement_rows", lambda table, ids: touched.extend(ids))

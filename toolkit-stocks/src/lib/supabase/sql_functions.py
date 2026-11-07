@@ -83,17 +83,27 @@ def get_symbols() -> list:
 
 
 def get_symbol_meta(symbols: list[str]) -> dict[str, dict]:
-	'''symbol -> {name, exchange, currency} for existing stock rows.'''
+	'''symbol -> {name, exchange, statement_currency} for existing stock rows.
+	statement_currency = reporting currency of the financial statements
+	(yfinance financialCurrency); differs from the trading currency for ADRs.'''
 	conn = get_connection()
 	cursor = conn.cursor()
 
 	try:
 		cursor.execute(
-			sql.SQL("SELECT symbol, name, exchange, currency FROM {} WHERE symbol = ANY(%s)").format(sql.Identifier(dbt.stock)),
+			sql.SQL("""
+				SELECT symbol, name, exchange, statement_currency
+				FROM {}
+				WHERE symbol = ANY(%s)
+			""").format(sql.Identifier(dbt.stock)),
 			(symbols,)
 		)
 		return {
-			row[0]: {"name": row[1], "exchange": row[2], "currency": row[3]}
+			row[0]: {
+				"name": row[1],
+				"exchange": row[2],
+				"statement_currency": row[3],
+			}
 			for row in cursor.fetchall()
 		}
 	except Exception as e:
@@ -167,12 +177,42 @@ def get_missing_market_caps(stock_ids: list[int]) -> set[int]:
 		return set()
 
 
-def get_latest_share_issued(stock_ids: list[int]) -> dict[int, float]:
-	'''stock_id -> share_issued from the newest balance sheet row with a
-	non-null value. Market cap provenance: own calc (price x share_issued)
-	primary, Yahoo marketCap fallback. At the same fiscal_date the quarterly
-	row wins over FY (period::text DESC: Q4 > FY), matching the fresher
-	filing used for the Toyota treasury-share case.'''
+def get_latest_shares_outstanding(stock_ids: list[int]) -> dict[int, tuple[float, dtdate]]:
+	'''stock_id -> (shares_outstanding, fiscal_date) from the newest balance
+	sheet row with any share count. Market cap provenance: own calc
+	(price x shares outstanding, split-adjusted) primary, Yahoo marketCap
+	fallback.
+
+	Outstanding basis is COMMON shares outstanding — treasury shares
+	(bought-back stock held, not canceled) and preferred shares (separate
+	class, separate ticker/price in KR-style markets) must not inflate a
+	common-ticker market cap. Yahoo taxonomy notes (verified across 7267.T,
+	BP.L, SPG, 7267.T):
+	- Ordinary Shares Number = issued - treasury for JP/UK/EU filers.
+	outstanding = COALESCE(
+		ordinary_shares_number,
+		share_issued - treasury (missing = 0),
+		share_issued
+	).
+	Preferred shares are stored (preferred_shares_number) but NEVER
+	subtracted:
+	- Yahoo's quarterly payloads carry DOLLAR values in the count field
+	  for some filers (RY.TO preferred = 14,000,000,000 = C$14B of
+	  preferred capital, not ~60M shares) -> arithmetic produces negative
+	  share counts;
+	- US-style filers (DLR) report preferred OUTSIDE issued/ordinary ->
+	  subtracting double-counts;
+	- Yahoo backfills the CURRENT preferred count onto every historical
+	  row (Samsung: 802,371,203 identical across fiscal years) -> not
+	  as-filed data.
+	Rows predating the 2026-11-07 migration have NULL share columns and
+	fall back to plain share_issued (old behavior).
+
+	At the same fiscal_date the quarterly row wins over FY (period::text
+	DESC: Q4 > FY), matching the fresher filing used for the Toyota
+	treasury-share case. fiscal_date is needed to apply later split factors
+	(a filing's share count is on that filing's share basis; a later 2-for-1
+	split doubles the count).'''
 	if not stock_ids:
 		return {}
 	conn = get_connection()
@@ -181,23 +221,31 @@ def get_latest_share_issued(stock_ids: list[int]) -> dict[int, float]:
 	try:
 		cursor.execute(
 			sql.SQL("""
-				SELECT DISTINCT ON (stock_id) stock_id, share_issued
+				SELECT DISTINCT ON (stock_id) stock_id, fiscal_date,
+					COALESCE(
+						ordinary_shares_number,
+						share_issued - COALESCE(treasury_shares_number, 0),
+						share_issued
+					) AS shares_outstanding
 				FROM {}
-				WHERE stock_id = ANY(%s) AND share_issued IS NOT NULL
+				WHERE stock_id = ANY(%s)
+					AND COALESCE(ordinary_shares_number, share_issued) IS NOT NULL
 				ORDER BY stock_id, fiscal_date DESC, period::text DESC
 			""").format(sql.Identifier(dbt.balance_sheet)),
 			(stock_ids,)
 		)
-		return {row[0]: row[1] for row in cursor.fetchall()}
+		# share counts are numeric -> Decimal from psycopg2; cast to honor the
+		# declared float return type (Decimal * float crashes downstream).
+		return {row[0]: (float(row[2]), to_date(row[1])) for row in cursor.fetchall()}
 	except Exception as e:
-		printf(f"get_latest_share_issued failed: {e}", lv.WARNING)
+		printf(f"get_latest_shares_outstanding failed: {e}", lv.WARNING)
 		return {}
 
 
-def get_quotes(stock_ids: list[int]) -> dict[int, dict]:
-	'''stock_id -> {stock_price, market_cap} from stock_quote. FA reads live
-	market data from the DB (written by the quote phase) instead of per-symbol
-	yfinance calls. Symbols without a quote row are simply absent.'''
+def get_split_factors(stock_ids: list[int]) -> dict[int, list[tuple[dtdate, float]]]:
+	'''stock_id -> [(split date, factor), ...] ascending by date, from
+	stock_split. Empty list for symbols without splits. Used to rebase a
+	filing's share_issued (pre-split basis) to today's share basis.'''
 	if not stock_ids:
 		return {}
 	conn = get_connection()
@@ -206,7 +254,37 @@ def get_quotes(stock_ids: list[int]) -> dict[int, dict]:
 	try:
 		cursor.execute(
 			sql.SQL("""
-				SELECT stock_id, stock_price, market_cap
+				SELECT stock_id, date, factor
+				FROM {}
+				WHERE stock_id = ANY(%s)
+				ORDER BY stock_id, date
+			""").format(sql.Identifier(dbt.stock_split)),
+			(stock_ids,)
+		)
+		out: dict[int, list[tuple[dtdate, float]]] = {}
+		for stock_id, date, factor in cursor.fetchall():
+			out.setdefault(stock_id, []).append((to_date(date), float(factor)))
+		return out
+	except Exception as e:
+		printf(f"get_split_factors failed: {e}", lv.WARNING)
+		return {}
+
+
+def get_quotes(stock_ids: list[int]) -> dict[int, dict]:
+	'''stock_id -> {stock_price, market_cap, currency} from stock_quote. FA
+	reads live market data from the DB (written by the quote phase) instead of
+	per-symbol yfinance calls. currency = trading ccy (Yahoo normalizes UK
+	pence quotes to GBP), needed by FA to detect statement-currency mismatch.
+	Symbols without a quote row are simply absent.'''
+	if not stock_ids:
+		return {}
+	conn = get_connection()
+	cursor = conn.cursor()
+
+	try:
+		cursor.execute(
+			sql.SQL("""
+				SELECT stock_id, stock_price, market_cap, currency
 				FROM {}
 				WHERE stock_id = ANY(%s)
 			""").format(sql.Identifier(dbt.quote)),
@@ -216,11 +294,36 @@ def get_quotes(stock_ids: list[int]) -> dict[int, dict]:
 			row[0]: {
 				"stock_price": row[1],
 				"market_cap": row[2],
+				"currency": row[3],
 			}
 			for row in cursor.fetchall()
 		}
 	except Exception as e:
 		printf(f"get_quotes failed: {e}", lv.WARNING)
+		return {}
+
+
+def get_fx_rates() -> dict[tuple[str, str, dtdate], float]:
+	'''Load the whole fx_rate table in one query: {(from, to, rate_date): rate}.
+	Keys keep `from` even though it is always USD today — future pairs won't
+	need a re-shape. Cross rates compute at read time:
+	rate(stmt -> trading) = r(trading) / r(stmt) with r(x) = USD->x rate.
+	"from"/"to" are reserved words -> always quoted via sql.Identifier.'''
+	conn = get_connection()
+	cursor = conn.cursor()
+
+	try:
+		cursor.execute(
+			sql.SQL('SELECT {}, {}, rate_date, rate FROM {}').format(
+				sql.Identifier("from"), sql.Identifier("to"), sql.Identifier(dbt.fx_rate)
+			)
+		)
+		return {
+			(row[0], row[1], to_date(row[2])): float(row[3])
+			for row in cursor.fetchall()
+		}
+	except Exception as e:
+		printf(f"get_fx_rates failed: {e}", lv.WARNING)
 		return {}
 
 
@@ -272,6 +375,66 @@ def get_fresh_stock_ids(table: str, stock_ids: list[int], cutoff: dtdate) -> set
 	return {sid for sid, d in latest.items() if d >= cutoff}
 
 
+def get_stock_overview_rows(stock_ids: list[int]) -> dict[str, dict]:
+	'''symbol -> stored row of the overview-managed columns.
+
+	Python-side change detection: overview diffs fetched profiles against
+	these rows and writes only the cells that actually differ (no DB
+	trigger). Empty dict on error -> every symbol counts as new -> full
+	writes, same as the pre-diff behavior.
+	'''
+	if not stock_ids:
+		return {}
+	conn = get_connection()
+	cursor = conn.cursor()
+
+	try:
+		cursor.execute(
+			sql.SQL("""
+				SELECT id, symbol, address, description, employees, industry,
+					key_executives, phone_number, sector, website, name,
+					exchange, city, country, zip, statement_currency
+				FROM {}
+				WHERE id = ANY(%s)
+			""").format(sql.Identifier(dbt.stock)),
+			(stock_ids,)
+		)
+		columns = [desc[0] for desc in cursor.description]
+		return {row[1]: dict(zip(columns, row)) for row in cursor.fetchall()}
+	except Exception as e:
+		printf(f"get_stock_overview_rows failed: {e}", lv.WARNING)
+		return {}
+
+
+def get_stale_stock_ids(stock_ids: list[int], days: int) -> set[int]:
+	'''stock_ids whose stock.maintenance_update is older than `days` (or NULL).
+
+	Overview freshness stamp: maintenance_update on stock only moves when the
+	row content actually changes (overview writes only changed cells), so a
+	recent stamp means the profile was synced recently — safe to skip.
+	'''
+	if not stock_ids:
+		return set()
+	conn = get_connection()
+	cursor = conn.cursor()
+
+	try:
+		cursor.execute(
+			sql.SQL("""
+				SELECT id
+				FROM {}
+				WHERE id = ANY(%s)
+					AND (maintenance_update IS NULL
+						OR maintenance_update < now() - make_interval(days => %s))
+			""").format(sql.Identifier(dbt.stock)),
+			(stock_ids, days)
+		)
+		return {row[0] for row in cursor.fetchall()}
+	except Exception as e:
+		printf(f"get_stale_stock_ids failed: {e}", lv.WARNING)
+		return set()
+
+
 def get_stamped_stock_ids(table: str, stock_ids: list[int]) -> set[int]:
 	'''stock_ids whose rows all carry an updated_at stamp (NULL stamps = legacy).'''
 	conn = get_connection()
@@ -321,12 +484,14 @@ def get_stock_ids_with_annual(table: str, stock_ids: list[int]) -> set[int]:
 
 def get_quarterly_fetch_ids(
 	statement_tables: list[str], stock_ids: list[int], sweep_bucket: int | None = None,
-) -> set[int]:
+	stagger_bucket: int | None = None,
+) -> tuple[set[int], dict[str, int]]:
 	'''stock_ids needing a quarterly statement fetch: stale AND NOT suppressed,
 	OR part of today's revision sweep (1/7 shard of revision-prone symbols).
 
 	Stale = today - max(newest fiscal_date across statement_tables) > window;
-	unknown symbols (no rows in any table) count as stale via COALESCE fallback.
+	unknown symbols (no rows in any table) count as stale via COALESCE fallback
+	but always fetch immediately (never staggered — first data must land).
 	Suppressed = a known future earnings event sits beyond the lookahead window
 	AND the gap is still < MAX_SUPPRESSION_GAP_DAYS (missing >~2 quarters is
 	never suppressed, so a wrong far-future event cannot hide staleness).
@@ -334,16 +499,29 @@ def get_quarterly_fetch_ids(
 	Sweep branch ignores suppression and requires known rows (gap <= sweep
 	window): refetch a rotating slice to catch restatements of recent data
 	within ~BUCKETS days instead of waiting out the fresh window.
+
+	Stale-and-not-suppressed symbols with known rows go through the stagger
+	shard (1/N per day) — without calendar coverage they would otherwise
+	refetch every day.
+
+	Returns (fetch_ids, reason_counts) where reason_counts maps fetch reason
+	(sweep | unknown | gap_too_old | stale_event_near | stale_no_event) to the
+	number of symbols.
 	'''
 	if not stock_ids:
-		return set()
+		return set(), {}
 
 	from constants.pipeline import (
 		EARNINGS_EVENT_LOOKAHEAD_DAYS,
 		MAX_SUPPRESSION_GAP_DAYS,
 		QUARTERLY_FISCAL_WINDOW_DAYS,
+		QUARTERLY_STAGGER_BUCKETS,
 		QUARTERLY_SWEEP_BUCKETS,
 		QUARTERLY_SWEEP_WINDOW_DAYS,
+	)
+	stagger_bucket = (
+		dtdate.today().toordinal() % QUARTERLY_STAGGER_BUCKETS
+		if stagger_bucket is None else stagger_bucket
 	)
 
 	conn = get_connection()
@@ -370,45 +548,84 @@ def get_quarterly_fetch_ids(
 					FROM ids LEFT JOIN latest l ON l.stock_id = ids.stock_id
 					GROUP BY ids.stock_id
 				),
-				ev AS (
+				ev_far AS (
 					SELECT stock_id, min(event_datetime) AS next_event
 					FROM {cal}
 					WHERE event_type = 'earnings'
 						AND event_datetime > now() + make_interval(days => %s)
 						AND stock_id = ANY(%s)
 					GROUP BY stock_id
+				),
+				ev_near AS (
+					SELECT stock_id, min(event_datetime) AS next_event
+					FROM {cal}
+					WHERE event_type = 'earnings'
+						AND event_datetime > now()
+						AND stock_id = ANY(%s)
+					GROUP BY stock_id
+				),
+				cls AS (
+					SELECT n.stock_id, n.newest_fiscal_date, ({gap}) AS gap,
+						e_far.next_event AS far_event, e_near.next_event AS near_event,
+						mod(n.stock_id, %s) = %s AS swept,
+						mod(n.stock_id, %s) = %s AS staggered
+					FROM n
+					LEFT JOIN ev_far e_far USING (stock_id)
+					LEFT JOIN ev_near e_near USING (stock_id)
+				),
+				qf AS (
+					SELECT stock_id,
+						CASE
+							WHEN newest_fiscal_date IS NULL THEN 'unknown'
+							WHEN swept AND gap <= %s THEN 'sweep'
+							WHEN gap >= %s THEN 'gap_too_old'
+							WHEN near_event IS NOT NULL THEN 'stale_event_near'
+							ELSE 'stale_no_event'
+						END AS reason
+					FROM cls
+					WHERE
+						-- sweep: revision-prone rows, 1/N rotating shard
+						(swept AND newest_fiscal_date IS NOT NULL AND gap <= %s)
+						-- no rows at all -> first fetch, always immediate
+						OR newest_fiscal_date IS NULL
+						-- stale AND not suppressed AND stagger shard hit
+						OR (
+							gap > %s
+							AND NOT (far_event IS NOT NULL AND gap < %s)
+							AND staggered
+						)
 				)
-				SELECT n.stock_id
-				FROM n
-				LEFT JOIN ev USING (stock_id)
-				WHERE (
-					-- sweep: revision-prone rows, 1/N rotating shard
-					n.newest_fiscal_date IS NOT NULL
-					AND ({gap}) <= %s
-					AND mod(n.stock_id, %s) = %s
-				) OR (
-					-- stale AND not suppressed
-					({gap}) > %s
-					AND (ev.next_event IS NULL OR ({gap}) >= %s)
-				)
+				SELECT stock_id, reason FROM qf
 			""").format(
 				branches=branches,
 				cal=sql.Identifier(dbt.economic_calendar),
 				gap=gap_expr,
 			),
 			[list(stock_ids)] * 4 + [
+				# ev_far: lookahead + ids
 				EARNINGS_EVENT_LOOKAHEAD_DAYS, list(stock_ids),
-				# sweep branch params
-				QUARTERLY_SWEEP_WINDOW_DAYS, QUARTERLY_SWEEP_BUCKETS, sweep_bucket,
-				# stale-and-not-suppressed branch params
+				# ev_near: ids only (no lookahead param, plain now())
+				list(stock_ids),
+				# shard params: sweep buckets/bucket, stagger buckets/bucket
+				QUARTERLY_SWEEP_BUCKETS, sweep_bucket,
+				QUARTERLY_STAGGER_BUCKETS, stagger_bucket,
+				# CASE params: sweep window, gap_too_old threshold
+				QUARTERLY_SWEEP_WINDOW_DAYS, MAX_SUPPRESSION_GAP_DAYS,
+				# WHERE params: sweep window, fresh window, suppression gap
+				QUARTERLY_SWEEP_WINDOW_DAYS,
 				QUARTERLY_FISCAL_WINDOW_DAYS, MAX_SUPPRESSION_GAP_DAYS,
 			],
 		)
-		return {row[0] for row in cursor.fetchall()}
+		fetch_ids: set[int] = set()
+		reasons: dict[str, int] = {}
+		for stock_id, reason in cursor.fetchall():
+			fetch_ids.add(stock_id)
+			reasons[reason] = reasons.get(reason, 0) + 1
+		return fetch_ids, reasons
 	except Exception as err:
 		tb = traceback.extract_tb(err.__traceback__)[-1]
 		printf(f"get_quarterly_fetch_ids: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
-		return set()
+		return set(), {}
 
 
 def touch_statement_rows(table: str, stock_ids: list[int]):
@@ -480,7 +697,8 @@ def insert_data_statement(
 	db_table: str,
 	null_tolerance=1,
 	update_condition: dict = {},
-	conflict_keys: list[str] | None = None
+	conflict_keys: list[str] | None = None,
+	label: str = "",
 ) -> int:
 	"""
 	:null_tolerance - value 1 means allow all
@@ -513,16 +731,16 @@ def insert_data_statement(
 			
 			passed_nulls, cleaned_row = evaluate_null_tolerance(row, null_tolerance)
 			if not passed_nulls:
-				printf("skipped statement object due to many NULLS in data", lv.INFO)
+				printf(f"{label}: skipped, too many NULLs".rstrip(), lv.INFO)
 				continue
 
 			cursor.execute(query, cleaned_row)
 
 			if cursor.rowcount == 0:
-				printf("Skipped duplicate row", lv.INFO)
+				printf(f"{label}: duplicate, skipped".rstrip(), lv.INFO)
 			else:
 				inserted += cursor.rowcount
-				printf("Inserted row", lv.INFO)
+				printf(f"{label} added".rstrip(), lv.INFO)
 
 		conn.commit()
 		return inserted

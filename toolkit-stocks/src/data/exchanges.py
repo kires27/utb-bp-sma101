@@ -30,16 +30,16 @@ exchanges = [
 	{"exchange_code": "Helsinki", "mic": "XHEL", "short_name": "Nasdaq Helsinki", "long_name": "Nasdaq Helsinki", "country": "Finland", "timezone": "Europe/Helsinki", "open_time": "09:00", "close_time": "17:30", "currency": "EUR"},
 
 	# --- Asia-Pacific ---
-	{"exchange_code": "Tokyo", "mic": "XTKS", "short_name": "TSE", "long_name": "Tokyo Stock Exchange", "country": "Japan", "timezone": "Asia/Tokyo", "open_time": "09:00", "close_time": "15:30", "currency": "JPY"},
-	{"exchange_code": "Hong Kong", "mic": "XHKG", "short_name": "HKEX", "long_name": "Hong Kong Stock Exchange", "country": "Hong Kong", "timezone": "Asia/Hong_Kong", "open_time": "09:30", "close_time": "16:00", "currency": "HKD"},
-	{"exchange_code": "HKSE", "mic": "XHKG", "short_name": "HKEX", "long_name": "Hong Kong Stock Exchange", "country": "Hong Kong", "timezone": "Asia/Hong_Kong", "open_time": "09:30", "close_time": "16:00", "currency": "HKD"},
-	{"exchange_code": "Shanghai", "mic": "XSHG", "short_name": "SSE", "long_name": "Shanghai Stock Exchange", "country": "China", "timezone": "Asia/Shanghai", "open_time": "09:30", "close_time": "15:00", "currency": "CNY"},
+	{"exchange_code": "Tokyo", "mic": "XTKS", "short_name": "TSE", "long_name": "Tokyo Stock Exchange", "country": "Japan", "timezone": "Asia/Tokyo", "open_time": "09:00", "break_start_time": "11:30", "break_end_time": "12:30", "close_time": "15:30", "currency": "JPY"},
+	{"exchange_code": "Hong Kong", "mic": "XHKG", "short_name": "HKEX", "long_name": "Hong Kong Stock Exchange", "country": "Hong Kong", "timezone": "Asia/Hong_Kong", "open_time": "09:30", "break_start_time": "12:00", "break_end_time": "13:00", "close_time": "16:00", "currency": "HKD"},
+	{"exchange_code": "HKSE", "mic": "XHKG", "short_name": "HKEX", "long_name": "Hong Kong Stock Exchange", "country": "Hong Kong", "timezone": "Asia/Hong_Kong", "open_time": "09:30", "break_start_time": "12:00", "break_end_time": "13:00", "close_time": "16:00", "currency": "HKD"},
+	{"exchange_code": "Shanghai", "mic": "XSHG", "short_name": "SSE", "long_name": "Shanghai Stock Exchange", "country": "China", "timezone": "Asia/Shanghai", "open_time": "09:30", "break_start_time": "11:30", "break_end_time": "13:00", "close_time": "15:00", "currency": "CNY"},
 	{"exchange_code": "Taiwan", "mic": "XTAI", "short_name": "TWSE", "long_name": "Taiwan Stock Exchange", "country": "Taiwan", "timezone": "Asia/Taipei", "open_time": "09:00", "close_time": "13:30", "currency": "TWD"},
-	{"exchange_code": "KSE", "mic": "XKRX", "short_name": "KRX", "long_name": "Korea Exchange", "country": "South Korea", "timezone": "Asia/Seoul", "open_time": "09:00", "close_time": "15:30", "currency": "KRW"},
+	{"exchange_code": "KSE", "mic": "XKRX", "short_name": "KRX", "long_name": "Korea Exchange", "country": "South Korea", "timezone": "Asia/Seoul", "open_time": "09:00", "break_start_time": "12:00", "break_end_time": "13:00", "close_time": "15:30", "currency": "KRW"},
 	{"exchange_code": "NSE", "mic": "XNSE", "short_name": "NSE", "long_name": "National Stock Exchange of India", "country": "India", "timezone": "Asia/Kolkata", "open_time": "09:15", "close_time": "15:30", "currency": "INR"},
 	{"exchange_code": "BSE", "mic": "XBOM", "short_name": "BSE", "long_name": "Bombay Stock Exchange", "country": "India", "timezone": "Asia/Kolkata", "open_time": "09:15", "close_time": "15:30", "currency": "INR"},
 	{"exchange_code": "ASX", "mic": "XASX", "short_name": "ASX", "long_name": "Australian Securities Exchange", "country": "Australia", "timezone": "Australia/Sydney", "open_time": "10:00", "close_time": "16:00", "currency": "AUD"},
-	{"exchange_code": "SES", "mic": "XSES", "short_name": "SGX", "long_name": "Singapore Exchange", "country": "Singapore", "timezone": "Asia/Singapore", "open_time": "09:00", "close_time": "17:00", "currency": "SGD"},
+	{"exchange_code": "SES", "mic": "XSES", "short_name": "SGX", "long_name": "Singapore Exchange", "country": "Singapore", "timezone": "Asia/Singapore", "open_time": "09:00", "break_start_time": "12:00", "break_end_time": "13:00", "close_time": "17:00", "currency": "SGD"},
 
 	# --- Middle East ---
 	{"exchange_code": "Istanbul", "mic": "XIST", "short_name": "BIST", "long_name": "Borsa Istanbul", "country": "Turkey", "timezone": "Europe/Istanbul", "open_time": "10:00", "close_time": "18:00", "currency": "TRY"},

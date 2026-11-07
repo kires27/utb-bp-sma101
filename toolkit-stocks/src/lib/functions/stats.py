@@ -49,7 +49,7 @@ def report(phases: list[dict], prod: bool = False):
 		printf("No phases reported stats", lv.WARNING)
 		return
 
-	printf("---- FINAL SUMMARY ----", lv.INFO)
+	printf("-- FINAL SUMMARY --", lv.INFO)
 	for stats in phases:
 		printf(summary_line(stats), lv.INFO)
 	printf(network_line(), lv.INFO)

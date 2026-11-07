@@ -15,16 +15,22 @@ export default defineEventHandler(async (event) => {
 		throw createError({ statusCode: 400, statusMessage: 'Invalid stock symbol' })
 	}
 
+	// TTM rows accumulate (one per pipeline run) — take the newest by
+	// fiscal_date instead of maybeSingle(), which 404s on multiple rows
 	const { data, error } = await client
 		.from('stock_financial_analysis')
 		.select('*')
 		.eq('stock_id', id)
 		.eq('period', 'TTM')
-		.maybeSingle()
+		.order('fiscal_date', { ascending: false })
+		.limit(1)
 
-	if (error || !data)
+	if (error)
 		throw createError({ statusCode: 404, statusMessage: error.message })
-
+	// limit(1) still returns an array — unwrap the single row
+	const row = data?.[0]
+	if (!row)
+		throw createError({ statusCode: 404, statusMessage: 'No TTM financial analysis for this stock' })
 
 	const { data: medianData, error: medianError } = await client
 		.rpc('get_all_medians', {
@@ -38,7 +44,7 @@ export default defineEventHandler(async (event) => {
 	const result = {}
 	for (const [key, meta] of Object.entries(FINANCIALS_SHAPE)) {
 		result[key] = {
-			value: data[key] ?? null,
+			value: row[key] ?? null,
 			median: medianData?.[key] ?? null,
 			group: meta.group,
 			isPercentage: meta.isPercentage,
@@ -47,9 +53,9 @@ export default defineEventHandler(async (event) => {
 	}
 
 	return {
-		maintenance_update: data.maintenance_update,
-		quality_score: data.quality_score,
-		median_comparison: data.median_comparison,
+		maintenance_update: row.maintenance_update,
+		quality_score: row.quality_score,
+		median_comparison: row.median_comparison,
 		groups: FINANCIAL_GROUPS,
 		result,
 	}

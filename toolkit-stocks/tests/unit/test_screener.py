@@ -139,9 +139,9 @@ def _reset_flushers():
 
 def _quotes():
 	return [
-		{"symbol": "AAA", "longName": "New Co A", "fullExchangeName": "NasdaqGS", "currency": "USD", "quoteType": "EQUITY"},
-		{"symbol": "BBB", "longName": "Existing Co", "fullExchangeName": "NasdaqGS", "currency": "USD", "quoteType": "EQUITY"},
-		{"symbol": "CCC", "shortName": "C Co", "fullExchangeName": "NYSE", "currency": "EUR", "quoteType": "EQUITY"},
+		{"symbol": "AAA", "longName": "New Co A", "fullExchangeName": "NasdaqGS", "quoteType": "EQUITY"},
+		{"symbol": "BBB", "longName": "Existing Co", "fullExchangeName": "NasdaqGS", "quoteType": "EQUITY"},
+		{"symbol": "CCC", "shortName": "C Co", "fullExchangeName": "NYSE", "quoteType": "EQUITY"},
 	]
 
 

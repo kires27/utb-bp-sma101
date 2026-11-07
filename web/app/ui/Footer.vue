@@ -92,7 +92,7 @@ const year = new Date().getFullYear();
 		</div>
 
 		<Section class="footer-bottom">
-			<Text variant="body-sm" tone="muted">©{{ year }} Halite. All rights reserved.</Text>
+			<Text variant="body-sm" tone="muted">©{{ year }} SMA101. All rights reserved.</Text>
 			<div class="footer-legal">
 				<NuxtLink :to="URI.privacy">
 					<Text variant="body-sm" tone="muted" link>Privacy Policy</Text>

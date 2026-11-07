@@ -30,7 +30,7 @@ def _fqs(fiscal_date, score):
 def ups(monkeypatch):
 	inserted = []
 	monkeypatch.setattr(pqs, "insert_data_statement",
-		lambda data, table, update_condition=None: inserted.append((update_condition["stock_id"], data["quality_score"])) or 1)
+		lambda data, table, update_condition=None, label="": inserted.append((update_condition["stock_id"], data["quality_score"])) or 1)
 	return inserted
 
 
@@ -55,7 +55,7 @@ def test_build_failure_counted(ups, monkeypatch):
 
 def test_update_condition_keys(ups, monkeypatch):
 	captured = {}
-	def fake_insert(data, table, update_condition=None):
+	def fake_insert(data, table, update_condition=None, label=""):
 		captured.update(update_condition)
 		return 1
 	monkeypatch.setattr(pqs, "insert_data_statement", fake_insert)

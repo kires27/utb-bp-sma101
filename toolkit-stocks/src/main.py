@@ -8,7 +8,7 @@ warnings.filterwarnings("ignore", message="Timestamp.utcnow is deprecated.*")
 
 # Phase registry: one entry per selectable phase. runner.run_phases gates on
 # these attrs; execution order is fixed there, not by CLI order.
-PHASES = ["quote", "overview", "statements", "prices", "dividends", "splits", "fa", "fqs", "calendar", "exchange"]
+PHASES = ["quote", "overview", "statements", "prices", "dividends", "splits", "fx", "fa", "fqs", "calendar", "exchange"]
 SYMBOL_MODES = ["db", "file", "screener"]
 
 parser = argparse.ArgumentParser(description="MICE script to insert/update data to database")
@@ -42,7 +42,7 @@ from lib.functions.stats import report
 # exchange seeds static reference data, calendar sweeps the universe-wide
 # calendar feed; both are standalone and unused symbols/stock_ids
 symbols, stock_ids = [], {}
-if not set(selected) <= {"exchange", "calendar"}:
+if not set(selected) <= {"exchange", "calendar", "fx"}:
 	if args.symbols == "file":
 		from data.symbols import manual_symbols as symbols
 	elif args.symbols == "screener":

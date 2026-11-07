@@ -4,6 +4,7 @@ import { useLocalStorage } from "@vueuse/core"
 import { API, URI } from '#shared/constants/routes'
 import { SEARCHBAR_HISTORY_KEY, MAX_SEARCHBAR_HISTORY } from '#shared/constants/variables'
 import { redirectWithToast } from "~/utils/toast"
+import { formatUpdatedAt, getMarketStatus, formatEventTime, formatEventWeekday, isEventToday } from "~/utils/marketStatus"
 import MenuSlider from '~/features/watchlist/components/MenuSlider.vue'
 
 const route = useRoute()
@@ -70,6 +71,7 @@ const isHydrated = ref(false)
 const isStale = computed(() => Boolean(stockDataRaw.value?.quote?.stale))
 const updatedAt = ref(null) // Date of last known regular_market_time
 const ageLabel = ref("")
+const nowTick = ref(0) // client-only clock — re-evaluates market status
 
 function syncUpdatedAt() {
 	const ts = stockDataRaw.value?.quote?.regular_market_time
@@ -82,9 +84,24 @@ function tickAge() {
 		ageLabel.value = ""
 		return
 	}
-	const s = Math.max(0, Math.round((Date.now() - updatedAt.value.getTime()) / 1000))
-	ageLabel.value = s < 60 ? `Updated ${s}s ago` : `Updated ${Math.floor(s / 60)}m ago`
+	ageLabel.value = formatUpdatedAt(updatedAt.value)
 }
+
+const marketStatus = computed(() => {
+	if (!nowTick.value) return null // client-only: wait for the first tick
+	const info = stockDataRaw.value?.basic?.exchange_info
+	if (!info) return null
+	const status = getMarketStatus(info, new Date())
+	if (!status?.nextEvent) return null
+	const time = formatEventTime(status.nextEvent.utcMs)
+	const day = isEventToday(status.nextEvent.utcMs)
+		? ""
+		: ` ${formatEventWeekday(status.nextEvent.utcMs)}`
+	return {
+		isOpen: status.isOpen,
+		text: `Market ${status.isOpen ? "open" : "closed"} · ${status.nextEvent.type} ${day}${time}`.trim(),
+	}
+})
 
 const supabase = useSupabaseClient()
 const stockId = computed(() => stockDataRaw.value?.basic?.id ?? null)
@@ -105,10 +122,14 @@ async function refreshQuote() {
 onMounted(async () => {
 	isHydrated.value = true
 	syncUpdatedAt()
+	nowTick.value++ // immediate first tick — market status renders without waiting 10s
 
 	// heartbeat: keeps interest alive + refreshes while user stares at page
 	heartbeat = setInterval(refreshQuote, 60_000)
-	ageTicker = setInterval(tickAge, 10_000)
+	ageTicker = setInterval(() => {
+		tickAge()
+		nowTick.value++
+	}, 10_000)
 
 	await rekeyChannel()
 })
@@ -195,6 +216,9 @@ function pushHistory(symbol) {
 					<Text v-if="isHydrated" variant="label" :tone="isStale ? 'red' : 'muted'">
 						<template v-if="isStale">⚠ stale</template>
 						<template v-else-if="ageLabel">{{ ageLabel }}</template>
+					</Text>
+					<Text v-if="marketStatus" class="market-status" variant="label" :tone="marketStatus.isOpen ? 'green' : 'muted'">
+						{{ marketStatus.text }}
 					</Text>
 				</div>
 				<Button variant="primary" size="sm" alt="add to watchlist" @click="openWatchlistMenu">
@@ -283,11 +307,8 @@ function pushHistory(symbol) {
 }
 
 .market-status {
-	display: flex;
-	align-items: center;
-	gap: 0.4rem;
-	font-size: 10px;
-	color: var(--teal);
+	/* both label Texts are inline spans — margin-left is the only way to gap them */
+	margin-left: 1rem;
 }
 
 .stock-price-block {

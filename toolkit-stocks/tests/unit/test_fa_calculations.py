@@ -6,6 +6,14 @@ from domain.financial_analysis.fa_calculations import (
 	capital_index, payback_period, assets_price, pe_ratio, pb_ratio,
 	dividend_yield, growth_calculation,
 )
+from lib.transforms.financial_analysis import fx_rate_for, make_fx_lookup
+
+
+def _d(s: str):
+	"""rate_date is stored as a date; tests use ISO strings the same way the
+	transform reads fiscal_date (fx_rate rows are keyed by date objects)."""
+	from datetime import date
+	return date.fromisoformat(s)
 
 
 def test_gross_margin():
@@ -105,3 +113,79 @@ def test_growth_calculation_missing_key_returns_none():
 
 def test_growth_calculation_empty_returns_none():
 	assert growth_calculation([], "net_income") is None
+
+
+# --- FX rate scaling (statement -> trading ccy conversion) ---
+
+
+def test_make_fx_lookup_usd_is_one():
+	fx = make_fx_lookup({("USD", "JPY", _d("2026-11-05")): 158.4})
+	assert fx("USD") == 1.0
+
+
+def test_make_fx_lookup_empty_rates_returns_none():
+	assert make_fx_lookup({}) is None
+
+
+def test_make_fx_lookup_latest_rate_on_or_before_today():
+	# latest date <= today wins; future-dated rows ignored
+	fx = make_fx_lookup({
+		("USD", "JPY", _d("2026-11-01")): 157.0,
+		("USD", "JPY", _d("2026-11-05")): 158.4,
+	})
+	assert fx("JPY") == 158.4
+
+
+def test_make_fx_lookup_falls_back_to_older_date():
+	# weekend/holiday gaps: newest bar <= today, even if days old
+	fx = make_fx_lookup({("USD", "JPY", _d("2020-01-02")): 108.5})
+	assert fx("JPY") == 108.5
+
+
+def test_make_fx_lookup_unknown_ccy_returns_none():
+	fx = make_fx_lookup({("USD", "JPY", _d("2026-11-05")): 158.4})
+	assert fx("XYZ") is None
+
+
+def test_fx_rate_for_same_ccy_noop():
+	assert fx_rate_for("JPY", "JPY", None) == 1.0
+	assert fx_rate_for("USD", "USD", lambda c: None) == 1.0
+
+
+def test_fx_rate_for_cross_rate_direction():
+	# r(trading)/r(stmt): USD trading (r=1), KRW statement (r=1400)
+	fx = make_fx_lookup({("USD", "KRW", _d("2026-11-05")): 1400.0})
+	assert fx_rate_for("USD", "KRW", fx) == pytest.approx(1 / 1400)
+
+
+def test_fx_rate_for_both_non_usd():
+	# EUR trading (0.9/USD), JPY statement (158/USD) -> 0.9/158
+	fx = make_fx_lookup({
+		("USD", "EUR", _d("2026-11-05")): 0.9,
+		("USD", "JPY", _d("2026-11-05")): 158.0,
+	})
+	assert fx_rate_for("EUR", "JPY", fx) == pytest.approx(0.9 / 158.0)
+
+
+def test_fx_rate_for_missing_rates_returns_none():
+	# statement ccy absent from fx_rate -> None (ratio lands NULL, not wrong)
+	fx = make_fx_lookup({("USD", "KRW", _d("2026-11-05")): 1400.0})
+	assert fx_rate_for("USD", "TRY", fx) is None
+
+
+def test_fx_rate_for_zero_statement_rate_returns_none():
+	fx = make_fx_lookup({
+		("USD", "KRW", _d("2026-11-05")): 1400.0,
+		("USD", "TRY", _d("2026-11-05")): 0.0,
+	})
+	assert fx_rate_for("USD", "TRY", fx) is None
+
+
+def test_fx_rate_for_missing_currency_arg_returns_none():
+	assert fx_rate_for(None, "KRW", lambda c: 1.0) is None
+	assert fx_rate_for("USD", None, lambda c: 1.0) is None
+
+
+def test_fx_rate_for_no_fx_closure_returns_none():
+	# mismatch detected but rates never loaded -> None, not a wrong ratio
+	assert fx_rate_for("USD", "KRW", None) is None

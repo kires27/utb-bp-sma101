@@ -48,9 +48,9 @@ def test_calculate_quality_score_success():
 		"dividend_yield":           [0.004027132,  0.004974699,  0.041229972,  None,      0.015974008],
 	}
 	fake_category_scores_data = {
-    	"profitability_earnings":  [23.75,  12.50,  6.25,   3.75,   16.25],
+    	"profitability_earnings":  [23.44,  12.50,  3.12,   4.69,   18.75],
 		"financial_stability":     [10.00,  1.67,   10.56,  12.78,  17.50],
-		"growth_quality":          [15.00,  14.00,  13.00,  3.00,   5.00],
+		"growth_quality":          [15.00,  15.00,  11.25,  2.50,   6.25],
 		"capital_discipline":      [5.83,   5.00,   1.25,   6.67,   7.50],
 		"market_value":            [2.50,   8.75,   8.75,   13.75,  3.75],
 		"shareholder_value":       [0.00,   3.33,   10.00,  0.00,   6.67],
@@ -58,11 +58,11 @@ def test_calculate_quality_score_success():
 	fake_analyses = helper_translate_object(fake_peers, fake_analyses_data)
 	fake_category_scores = helper_translate_object(fake_peers, fake_category_scores_data)
 	fake_quality_scores = {
-		101: 57.08, 
-		102: 45.25, 
-		103: 49.81, 
-		104: 39.94, 
-		105: 56.67,
+		101: 56.77, 
+		102: 46.25, 
+		103: 44.93, 
+		104: 40.38, 
+		105: 60.42,
 	}
 
 	with (patch("domain.financial_quality_score.quality_score.get_stock_sector", return_value=fake_industry),

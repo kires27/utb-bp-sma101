@@ -51,9 +51,10 @@ def run_exchange(force: bool = False) -> dict:
 				f"""
 				INSERT INTO {dbt.stock_exchange} (
 					exchange_code, mic, short_name, long_name, country,
-					timezone, open_time, close_time, week_pattern, currency
+					timezone, open_time, break_start_time, break_end_time,
+					close_time, week_pattern, currency
 				)
-				VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+				VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 				ON CONFLICT (exchange_code) DO UPDATE SET
 					mic = EXCLUDED.mic,
 					short_name = EXCLUDED.short_name,
@@ -61,6 +62,8 @@ def run_exchange(force: bool = False) -> dict:
 					country = EXCLUDED.country,
 					timezone = EXCLUDED.timezone,
 					open_time = EXCLUDED.open_time,
+					break_start_time = EXCLUDED.break_start_time,
+					break_end_time = EXCLUDED.break_end_time,
 					close_time = EXCLUDED.close_time,
 					week_pattern = EXCLUDED.week_pattern,
 					currency = EXCLUDED.currency,
@@ -68,7 +71,9 @@ def run_exchange(force: bool = False) -> dict:
 				""",
 				(
 					ex["exchange_code"], ex.get("mic"), ex["short_name"], ex["long_name"],
-					ex.get("country"), ex["timezone"], ex["open_time"], ex["close_time"],
+					ex.get("country"), ex["timezone"], ex["open_time"],
+					ex.get("break_start_time"), ex.get("break_end_time"),
+					ex["close_time"],
 					ex.get("week_pattern", "1111100"), ex.get("currency"),
 				),
 			)

@@ -11,15 +11,21 @@ const symbol = computed(() =>
 )
 
 const stockData = ref(null)
+const quoteData = ref(null)
 const events = ref(null)
 
 watch(symbol, async () => {
 	stockData.value = null
+	quoteData.value = null
 	events.value = null
 
 	stockData.value = await cached(
 		`fa-profile-${symbol.value}`,
 		() => $fetch(API.stocks.get_stock(symbol.value)),
+	)
+	quoteData.value = await cached(
+		`fa-quote-${symbol.value}`,
+		() => $fetch(API.stocks.get_quote(symbol.value)),
 	)
 	events.value = await cached(
 		`fa-events-${symbol.value}`,
@@ -49,8 +55,8 @@ const formatDividend = (amount) => {
 	if (amount == null || isNaN(amount)) return null
 	const a = Number(amount)
 	return a >= 1
-		? formatCurrency(a, stockData.currency, 2)
-		: formatCurrency(a, stockData.currency, 6)
+		? formatCurrency(a, quoteData.value?.currency, 2)
+		: formatCurrency(a, quoteData.value?.currency, 6)
 }
 
 const companyInfo = computed(() => [
@@ -61,7 +67,7 @@ const companyInfo = computed(() => [
 	{ label: "Sector", value: stockData.value?.sector },
 	{ label: "Industry", value: stockData.value?.industry },
 	{ label: "Exchange", value: stockData.value?.exchange },
-	{ label: "Currency", value: stockData.value?.currency },
+	{ label: "Currency", value: quoteData.value?.currency },
 	{ label: "Fiscal Year End", value: "December" },
 	{ label: "Website", value: stockData.value?.website, link: true },
 ])

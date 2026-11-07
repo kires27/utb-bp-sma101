@@ -61,6 +61,12 @@ def run_phases(args, symbols: list[str], stock_ids: dict[str, int], force: bool 
 		from .market_data import run_market_data
 		phases.append(_with_net(run_market_data, get_ctx()))
 
+	# fx feeds fx_rate used by the fa transform (statement->trading ccy);
+	# must run before fa in the daily set.
+	if args.fx:
+		from .fx import run_fx
+		phases.append(_with_net(run_fx, force=force))
+
 	if args.fa:
 		from .financial_analysis import run_financial_analysis
 		phases.append(_with_net(run_financial_analysis, get_ctx()))
