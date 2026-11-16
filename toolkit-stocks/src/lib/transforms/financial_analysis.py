@@ -5,6 +5,7 @@ import domain.financial_analysis.fa_calculations as fac
 from lib.supabase.sql_functions import get_statements_by_stock, get_ttm_dividends
 from lib.module.printf import printf, level as lv
 import constants.db_tables as dbt
+from constants.pipeline import SYMBOL_COL_WIDTH
 
 
 def make_fx_lookup(rates: dict):
@@ -163,5 +164,5 @@ def build_financial_analysis(symbol: str, stock_id: int, quote: dict, fx=None, s
 		}
 	except Exception as err:
 		tb = traceback.extract_tb(err.__traceback__)[-1]
-		printf(f"{symbol}: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
+		printf(f"{symbol:<{SYMBOL_COL_WIDTH}}: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
 		return {}

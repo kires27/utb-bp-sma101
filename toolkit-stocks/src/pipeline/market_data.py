@@ -6,6 +6,7 @@ from lib.transforms import build_price_rows, build_dividend_rows, build_split_ro
 from lib.module.printf import printf, level as lv
 from lib.supabase.sql_functions import get_latest_dates, RowFlusher
 import constants.db_tables as dbt
+from constants.pipeline import SYMBOL_COL_WIDTH
 from .context import valid_symbols
 
 EPOCH = dt.date(2000, 1, 1)
@@ -86,7 +87,7 @@ def run_yf(ctx, stats):
 			count_symbol(stats, False, symbol)
 			continue
 		if want["prices"]:
-			printf(f"---- {symbol:<10} historical prices --", lv.INFO)
+			printf(f"---- {symbol:<{SYMBOL_COL_WIDTH}} historical prices --", lv.INFO)
 			flushers["prices"].add(build_price_rows(symbol, payload["stock_id"], payload["price_rows"], payload["latest"]))
 		if want["dividends"]:
 			flushers["dividends"].add(build_dividend_rows(symbol, payload["stock_id"], payload["div_events"], payload["latest"]))
@@ -94,4 +95,13 @@ def run_yf(ctx, stats):
 			flushers["splits"].add(build_split_rows(symbol, payload["stock_id"], payload["split_events"]))
 		count_symbol(stats, True)
 
-	stats["rows_written"] = sum(f.finish() for f in flushers.values() if f is not None)
+	# finish() each flusher: returns rows written, needed per-flag for the summary
+	written = {name: f.finish() for name, f in flushers.items() if f is not None}
+	stats["rows_written"] = sum(written.values())
+	mode = "full history" if full else "incremental (from newest stored date)"
+	rows_txt = ", ".join(f"{name}={n}" for name, n in sorted(written.items())) or "none"
+	printf(
+		f"prices/dividends/splits ({mode}): {len(targets)} symbols; rows written: {rows_txt}; "
+		f"{len(stats['failed_symbols'])} failed",
+		lv.INFO,
+	)

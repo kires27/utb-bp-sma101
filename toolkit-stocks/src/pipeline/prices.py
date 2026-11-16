@@ -12,6 +12,7 @@ from lib.supabase.sql_functions import (
 	insert_rows_bulk,
 )
 import constants.db_tables as dbt
+from constants.pipeline import SYMBOL_COL_WIDTH
 
 # Flush size for stock_quote upserts: rows are small (one per symbol), and
 # 4000-row flushes are a single execute_values page.
@@ -90,7 +91,7 @@ def own_market_cap(quote: dict, shares: float | None, symbol: str) -> None:
 		adr_ratio = derive_adr_ratio(own, yahoo)
 		if adr_ratio is not None:
 			printf(
-				f"{symbol:<10}: market_cap divergence own {own:.0f} vs yahoo {yahoo:.0f} "
+				f"{symbol:<{SYMBOL_COL_WIDTH}}: market_cap divergence own {own:.0f} vs yahoo {yahoo:.0f} "
 				f"(ratio {ratio:.3f}, ADR {adr_ratio:g}x -> {ratio / adr_ratio:.3f}), "
 				f"own cap corrected to {own / adr_ratio:.0f}",
 				lv.INFO,
@@ -98,7 +99,7 @@ def own_market_cap(quote: dict, shares: float | None, symbol: str) -> None:
 			own /= adr_ratio
 		elif abs(ratio - 1) > CAP_DIVERGENCE:
 			printf(
-				f"{symbol:<10}: market_cap divergence own {own:.0f} vs yahoo {yahoo:.0f} (ratio {ratio:.3f})",
+				f"{symbol:<{SYMBOL_COL_WIDTH}}: market_cap divergence own {own:.0f} vs yahoo {yahoo:.0f} (ratio {ratio:.3f})",
 				lv.WARNING,
 			)
 	quote["market_cap"] = own
@@ -140,6 +141,7 @@ def run_quote(symbols: list[str], stock_ids: dict[str, int], force: bool = False
 	split_factors = get_split_factors(known_ids)
 
 	rows: list[dict] = []
+	self_heals = 0
 	quotes = src.fetch(symbols)
 	for symbol in symbols:
 		quote = quotes.get(symbol)
@@ -159,6 +161,7 @@ def run_quote(symbols: list[str], stock_ids: dict[str, int], force: bool = False
 			if quote.get("market_cap") is None or stock_id not in missing_cap_ids:
 				stats["skipped_fresh"] = stats.get("skipped_fresh", 0) + 1
 				continue
+			self_heals += 1
 		row = build_quote_row(symbol, stock_id, quote)
 		if not row:
 			count_symbol(stats, False, symbol)
@@ -175,9 +178,12 @@ def run_quote(symbols: list[str], stock_ids: dict[str, int], force: bool = False
 			conflict_keys=["stock_id"],
 		)
 	skipped = stats.get("skipped_fresh", 0)
+	failed = len(stats["failed_symbols"])
+	heal_txt = f" (incl {self_heals} self-heal backfills: stored row had no market_cap)" if self_heals else ""
 	stats["rows_written"] = written
 	printf(
-		f"quote: {written}/{len(rows)} quote rows written, {skipped} skipped",
+		f"quote: {len(symbols)} symbols; wrote {written} rows{heal_txt}; "
+		f"skipped {skipped} (market closed, fetched quote not newer than stored); {failed} failed",
 		lv.INFO,
 	)
 	return stats

@@ -6,6 +6,7 @@ from yfinance.exceptions import YFRateLimitError
 
 from lib.functions.netstats import incr_yf
 from lib.module.printf import printf, level as lv
+from constants.pipeline import SYMBOL_COL_WIDTH
 
 
 MAX_WORKERS = 8
@@ -60,7 +61,7 @@ class YFinanceSource:
 							out[result_symbol] = result
 					except Exception as err:
 						tb = traceback.extract_tb(err.__traceback__)[-1]
-						printf(f"{symbol}: {err} (File '{tb.filename}', line {tb.lineno})", lv.WARNING)
+						printf(f"{symbol:<{SYMBOL_COL_WIDTH}}: {err} (File '{tb.filename}', line {tb.lineno})", lv.WARNING)
 			except KeyboardInterrupt:
 				# Do not wait for in-flight yfinance calls; cancel pending work.
 				pool.shutdown(wait=False, cancel_futures=True)
@@ -78,11 +79,11 @@ class YFinanceSource:
 				return fn(*args, **kwargs)
 			except YFRateLimitError as err:
 				wait = 2 ** attempt
-				printf(f"{symbol}: rate limited, retry in {wait}s ({err})", lv.WARNING)
+				printf(f"{symbol:<{SYMBOL_COL_WIDTH}}: rate limited, retry in {wait}s ({err})", lv.WARNING)
 				time.sleep(wait)
 			except Exception:
 				raise
-		printf(f"{symbol}: giving up after {MAX_RETRIES} retries", lv.ERROR)
+		printf(f"{symbol:<{SYMBOL_COL_WIDTH}}: giving up after {MAX_RETRIES} retries", lv.ERROR)
 		return None
 
 	def info(self, symbol: str) -> dict | None:

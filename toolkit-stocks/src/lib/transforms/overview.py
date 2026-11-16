@@ -3,6 +3,7 @@ import traceback
 from datetime import datetime, timezone
 
 from lib.module.printf import printf, level as lv
+from constants.pipeline import SYMBOL_COL_WIDTH
 
 
 def build_overview_row(symbol: str, profile: dict, officers: list[dict], db_meta: dict, yf_info: dict | None) -> dict:
@@ -59,5 +60,5 @@ def build_overview_row(symbol: str, profile: dict, officers: list[dict], db_meta
 		return row
 	except Exception as err:
 		tb = traceback.extract_tb(err.__traceback__)[-1]
-		printf(f"{symbol}: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
+		printf(f"{symbol:<{SYMBOL_COL_WIDTH}}: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
 		return {}

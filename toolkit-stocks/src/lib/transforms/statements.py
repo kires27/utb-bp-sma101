@@ -3,6 +3,7 @@ from datetime import date
 
 from datasource.base import normalize_title, STATEMENT_FIELDS
 from lib.module.printf import printf, level as lv
+from constants.pipeline import SYMBOL_COL_WIDTH
 
 
 def period_from_date(d: date, period_type: str) -> str:
@@ -73,7 +74,7 @@ def build_statement_rows(symbol: str, stock_id: int, grouped: list[dict], period
 		return rows
 	except Exception as err:
 		tb = traceback.extract_tb(err.__traceback__)[-1]
-		printf(f"{symbol}: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
+		printf(f"{symbol:<{SYMBOL_COL_WIDTH}}: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
 		return []
 
 

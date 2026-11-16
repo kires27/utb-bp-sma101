@@ -89,23 +89,26 @@ async function fetchViaChart(symbol) {
 
 /**
  * Map a fresh quote onto the stock_quote column shape.
- * Change fields are derived vs previousClose; percent is raw 0-1 (DB convention).
+ * Change fields are derived vs previousClose, rounded to 2 decimals.
+ * Percent is stored in percent points (e.g. -0.93 = -0.93%), matching the
+ * toolkit quote-phase writer (QUOTE_DECIMALS = 2).
  * @param {object} quote - fetchQuote result
  * @returns {object} patch for upsertPriceRow
  */
 export function buildQuotePatch(quote) {
+	const round2 = (v) => (v == null ? null : Math.round(v * 100) / 100);
 	const change =
 		quote.previousClose != null ? quote.price - quote.previousClose : null;
 	const changePercent =
 		change != null && quote.previousClose
-			? change / quote.previousClose
+			? (change / quote.previousClose) * 100
 			: null;
 
 	return {
 		stock_price: quote.price,
 		market_cap: quote.marketCap,
-		regular_market_change: change,
-		regular_market_change_percent: changePercent,
+		regular_market_change: round2(change),
+		regular_market_change_percent: round2(changePercent),
 		regular_market_time: quote.regularMarketTime,
 		currency: quote.currency,
 		maintenance_update: new Date().toISOString(),

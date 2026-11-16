@@ -8,7 +8,7 @@ from lib.supabase.sql_functions import (
 	get_stock_overview_rows, get_stale_stock_ids, insert_data_statement, update_row,
 )
 import constants.db_tables as dbt
-from constants.pipeline import OVERVIEW_MAX_AGE_DAYS
+from constants.pipeline import OVERVIEW_MAX_AGE_DAYS, SYMBOL_COL_WIDTH
 from .context import refresh_ids
 
 # Never diffed: maintenance_update is the freshness stamp itself (moves only
@@ -57,7 +57,11 @@ def run_overview(ctx):
 		)
 		targets = [s for s in targets if ctx.stock_ids.get(s) in stale_ids]
 		stats["skipped_fresh"] = len(ctx.symbols) - len(targets)
-		printf(f"overview: {len(targets)}/{len(ctx.symbols)} symbols stale -> fetch", lv.INFO)
+		printf(
+			f"overview: fetching {len(targets)}/{len(ctx.symbols)} (stale: no profile refresh "
+			f"in >{OVERVIEW_MAX_AGE_DAYS}d); skipped {stats['skipped_fresh']} fresh",
+			lv.INFO,
+		)
 	else:
 		printf(f"overview: {'force' if force else 'full'} set, fetching all symbols", lv.INFO)
 
@@ -76,7 +80,7 @@ def run_overview(ctx):
 	for symbol, info in infos.items():
 		row = build_overview_row(symbol, info, None, ctx.symbol_meta.get(symbol, {}) or {}, info)
 		if not row.get("name"):
-			printf(f"{symbol:<10}: no name resolved, skipping overview row", lv.WARNING)
+			printf(f"{symbol:<{SYMBOL_COL_WIDTH}}: no name resolved, skipping overview row", lv.WARNING)
 			count_symbol(stats, False, symbol)
 			continue
 		rows.append(row)
@@ -93,6 +97,9 @@ def run_overview(ctx):
 			}
 			if not changed:
 				stats["skipped_unchanged"] = stats.get("skipped_unchanged", 0) + 1
+				# Healthy symbol: count ok so verify's failed = total - ok -
+				# skipped_fresh does not mistake unchanged for a failure.
+				count_symbol(stats, True)
 				continue
 			# Partial update: changed cells + fresh stamp only. Must go
 			# through a plain UPDATE — an upsert of a partial row dies on
@@ -109,5 +116,11 @@ def run_overview(ctx):
 			rows_written = insert_data_statement(row, dbt.stock, label=symbol)
 		count_symbol(stats, True, rows=rows_written)
 
+	updated = stats["symbols_ok"] - stats.get("skipped_unchanged", 0)
+	printf(
+		f"overview: {updated} updated, {stats.get('skipped_unchanged', 0)} unchanged "
+		f"(fetched profile identical to stored), {len(stats['failed_symbols'])} failed",
+		lv.INFO,
+	)
 	refresh_ids(ctx)
 	return stats

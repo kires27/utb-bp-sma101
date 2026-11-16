@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from lib.functions.data_types import time_to_timestamptz
 from lib.module.printf import printf, level as lv
+from constants.pipeline import SYMBOL_COL_WIDTH
 
 
 QUOTE_DECIMALS = 2
@@ -44,5 +45,5 @@ def build_quote_row(symbol: str, stock_id: int, quote: dict) -> dict:
 		return row
 	except Exception as err:
 		tb = traceback.extract_tb(err.__traceback__)[-1]
-		printf(f"{symbol}: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
+		printf(f"{symbol:<{SYMBOL_COL_WIDTH}}: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
 		return {}

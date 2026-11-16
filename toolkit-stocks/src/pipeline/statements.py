@@ -9,8 +9,9 @@ from lib.supabase.sql_functions import (
 	get_stock_ids_with_annual, touch_statement_rows, RowFlusher,
 )
 from constants.pipeline import (
-	EARNINGS_EVENT_LOOKAHEAD_DAYS, MAX_SUPPRESSION_GAP_DAYS, QUARTERLY_FISCAL_WINDOW_DAYS,
-	QUARTERLY_SWEEP_BUCKETS, QUARTERLY_SWEEP_WINDOW_DAYS, QUARTERLY_STAGGER_BUCKETS,
+	EARNINGS_EVENT_LOOKAHEAD_DAYS, FETCH_REASON_LABELS, MAX_SUPPRESSION_GAP_DAYS,
+	QUARTERLY_FISCAL_WINDOW_DAYS, QUARTERLY_SWEEP_BUCKETS, QUARTERLY_SWEEP_WINDOW_DAYS,
+	QUARTERLY_STAGGER_BUCKETS, REASON_LABELS, SYMBOL_COL_WIDTH,
 )
 import constants.db_tables as dbt
 from .context import valid_symbols
@@ -41,8 +42,13 @@ def fresh_symbols(ctx, db_table: str, targets: list[str], period_type: str) -> s
 	fresh_ids = get_fresh_stock_ids(db_table, stock_ids, fiscal_cutoff)
 	stamped_ids = get_stamped_stock_ids(db_table, stock_ids)
 	fresh = {s for s in targets if ctx.stock_ids[s] in fresh_ids and ctx.stock_ids[s] in stamped_ids}
-	skipped = len(targets) - len(fresh)
-	printf(f"{db_table} ({period_type}): {skipped}/{len(targets)} symbols stale/unknown -> fetch", lv.INFO)
+	to_fetch = len(targets) - len(fresh)
+	printf(
+		f"{db_table} ({period_type}): fetching {to_fetch}/{len(targets)} "
+		f"(stale: last annual filing older than {FRESH_FISCAL_WINDOW_DAYS}d, or rows unstamped); "
+		f"skipped {len(fresh)} fresh (filing within {FRESH_FISCAL_WINDOW_DAYS}d)",
+		lv.INFO,
+	)
 	return fresh
 
 
@@ -88,24 +94,48 @@ def quarterly_fetch_decision(
 	return staggered
 
 
+def _reason_txt(counts: dict) -> str:
+	'''Reason counts -> "label=v, label=v" using human-readable labels.'''
+	return ", ".join(f"{REASON_LABELS[k]}={v}" for k, v in sorted(counts.items()))
+
+
 def quarterly_targets(ctx, db_table: str, targets: list[str], period_type: str) -> list[str]:
 	'''Quarterly fetch targets: stale-and-not-suppressed symbols in today's
 	stagger shard, today's revision-sweep shard, legacy NULL-stamp rows in
 	this table (refetched and stamped once), and never-fetched symbols.'''
 	stock_ids = [ctx.stock_ids[s] for s in targets]
-	sweep_bucket = date.today().toordinal() % QUARTERLY_SWEEP_BUCKETS
+	day_bucket = date.today().toordinal()
+	sweep_bucket = day_bucket % QUARTERLY_SWEEP_BUCKETS
+	stagger_bucket = day_bucket % QUARTERLY_STAGGER_BUCKETS
 	fetch_ids, reasons = get_quarterly_fetch_ids(
-		QUARTERLY_STATEMENT_TABLES, stock_ids, sweep_bucket,
+		QUARTERLY_STATEMENT_TABLES, stock_ids, sweep_bucket, stagger_bucket,
 	)
 	stamped_ids = get_stamped_stock_ids(db_table, stock_ids)
 	needed = [
 		s for s in targets
 		if ctx.stock_ids[s] in fetch_ids or ctx.stock_ids[s] not in stamped_ids
 	]
-	reason_txt = ", ".join(f"{k}={v}" for k, v in sorted(reasons.items()))
+	# Symbols targeted ONLY because of legacy unstamped rows (the SQL fetch
+	# reasons do not cover them); logged separately so the counts add up.
+	unstamped = [s for s in needed if ctx.stock_ids[s] not in fetch_ids]
+	fetch_counts = {k: v for k, v in reasons.items() if k in FETCH_REASON_LABELS}
+	skip_counts = {k: v for k, v in reasons.items() if k not in FETCH_REASON_LABELS}
+	if unstamped:
+		fetch_counts["unstamped"] = fetch_counts.get("unstamped", 0) + len(unstamped)
 	printf(
-		f"{db_table} ({period_type}): {len(needed)}/{len(targets)} symbols stale/unknown "
-		f"-> fetch (sweep shard {sweep_bucket}/{QUARTERLY_SWEEP_BUCKETS}: {reason_txt})",
+		f"{db_table} ({period_type}): fetching {len(needed)}/{len(targets)}; "
+		f"skipped {len(targets) - len(needed)} ({_reason_txt(skip_counts) or 'none'})",
+		lv.INFO,
+	)
+	printf(
+		f"{db_table} ({period_type}): fetch reasons: {_reason_txt(fetch_counts) or 'none'}",
+		lv.INFO,
+	)
+	printf(
+		f"sweep shard {sweep_bucket}/{QUARTERLY_SWEEP_BUCKETS} "
+		f"(1/{QUARTERLY_SWEEP_BUCKETS} of symbols re-checked daily for restatements); "
+		f"stagger shard {stagger_bucket}/{QUARTERLY_STAGGER_BUCKETS} "
+		f"(1/{QUARTERLY_STAGGER_BUCKETS} of stale symbols fetched daily)",
 		lv.INFO,
 	)
 	return needed
@@ -165,7 +195,7 @@ def run_statements(ctx, finance_type: str, db_table: str, null_tolerance: float,
 			else:
 				count_symbol(stats, False, symbol)
 			continue
-		printf(f"---- {symbol:<10} {finance_type} {period_type} ----", lv.INFO)
+		printf(f"---- {symbol:<{SYMBOL_COL_WIDTH}} {finance_type} {period_type} ----", lv.INFO)
 		rows = build_statement_rows(symbol, ctx.stock_ids[symbol], records, period_type, finance_type)
 		flusher.add(rows)
 		# Stamp even when every row was a duplicate (rows=0): the fetch

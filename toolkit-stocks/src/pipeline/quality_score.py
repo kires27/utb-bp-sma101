@@ -4,6 +4,7 @@ from lib.module.printf import printf, level as lv
 from lib.supabase.sql_functions import insert_data_statement
 from domain.financial_quality_score.quality_score import reset_quality_cache
 import constants.db_tables as dbt
+from constants.pipeline import SYMBOL_COL_WIDTH
 from .context import valid_symbols
 
 
@@ -21,6 +22,10 @@ def run_quality_score(ctx):
 	for symbol in targets:
 		fqs = build_quality_score(ctx.stock_ids[symbol])
 		if not fqs:
+			printf(
+				f"{symbol:<{SYMBOL_COL_WIDTH}}: no quality score (missing or insufficient FA rows / peer data)",
+				lv.WARNING,
+			)
 			count_symbol(stats, False, symbol)
 			continue
 
@@ -31,4 +36,9 @@ def run_quality_score(ctx):
 		}, label=f"{symbol} qs")
 		count_symbol(stats, True, rows=rows)
 
+	printf(
+		f"quality score: {stats['symbols_ok']}/{len(targets)} symbols scored "
+		f"(peer-normalized, sector medians); {len(stats['failed_symbols'])} failed",
+		lv.INFO,
+	)
 	return stats

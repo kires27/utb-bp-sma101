@@ -80,6 +80,7 @@ def run_fx(force: bool = False, currencies: list[str] | None = None) -> dict:
 		count_symbol(stats, True, rows=len(rows))
 
 	written = flusher.finish()
-	printf(f"fx: {written} rows written across {len(pairs)} pairs", lv.INFO)
+	mode = "full history backfill" if force else "incremental (1y refresh, older rows untouched)"
+	printf(f"fx: {written} rows written across {len(pairs)} pairs ({mode})", lv.INFO)
 	stats["rows_written"] = written
 	return stats

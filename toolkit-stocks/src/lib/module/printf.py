@@ -31,7 +31,7 @@ class printf:
 		cls._flush_pending()
 		if cls._file:
 			timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-			cls._write_line(f"[{timestamp}] [INFO] Log ended successfully")
+			cls._write_line(f"[{timestamp}] [INFO   ] Log ended successfully")
 			cls._file.flush()
 			cls._file.close()
 			cls._file = None
@@ -55,7 +55,7 @@ class printf:
 		cls._last_msg_counter = 1
 		cls._last_ts = timestamp
 
-		cls._write_line(f"[{timestamp}] [{level}] {message}")
+		cls._write_line(f"[{timestamp}] [{level:<7}] {message}")
 		return None
 
 	@classmethod
@@ -63,7 +63,7 @@ class printf:
 		"""If the last message had duplicates, write its summary line (newest timestamp + count)."""
 		if cls._last_msg is None or cls._last_msg_counter <= 1:
 			return
-		cls._write_line(f"[{cls._last_ts}] [{cls._last_level}] {cls._last_msg} ({cls._last_msg_counter})")
+		cls._write_line(f"[{cls._last_ts}] [{cls._last_level:<7}] {cls._last_msg} ({cls._last_msg_counter})")
 
 	@classmethod
 	def _write_line(cls, msg_row):

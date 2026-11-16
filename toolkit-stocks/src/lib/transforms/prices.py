@@ -1,6 +1,7 @@
 import traceback
 
 from lib.module.printf import printf, level as lv
+from constants.pipeline import SYMBOL_COL_WIDTH
 
 
 def _clean(value) -> float | None:
@@ -63,5 +64,5 @@ def build_price_rows(symbol: str, stock_id: int, rows_desc: list[dict], latest_d
 		return rows
 	except Exception as err:
 		tb = traceback.extract_tb(err.__traceback__)[-1]
-		printf(f"{symbol}: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
+		printf(f"{symbol:<{SYMBOL_COL_WIDTH}}: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
 		return []

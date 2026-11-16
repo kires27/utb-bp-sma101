@@ -504,15 +504,19 @@ def get_quarterly_fetch_ids(
 	shard (1/N per day) — without calendar coverage they would otherwise
 	refetch every day.
 
-	Returns (fetch_ids, reason_counts) where reason_counts maps fetch reason
-	(sweep | unknown | gap_too_old | stale_event_near | stale_no_event) to the
-	number of symbols.
+	Returns (fetch_ids, reason_counts) where reason_counts classifies EVERY
+	symbol: fetch reasons (unknown | sweep | gap_too_old | stale_event_near |
+	stale_no_event) and skip reasons (fresh | suppressed | waiting_stagger)
+	are each mapped to the number of symbols. fetch_ids holds the ids whose
+	reason is a fetch reason; statements.py splits the counts via
+	constants.pipeline.FETCH_REASON_LABELS.
 	'''
 	if not stock_ids:
 		return set(), {}
 
 	from constants.pipeline import (
 		EARNINGS_EVENT_LOOKAHEAD_DAYS,
+		FETCH_REASON_LABELS,
 		MAX_SUPPRESSION_GAP_DAYS,
 		QUARTERLY_FISCAL_WINDOW_DAYS,
 		QUARTERLY_STAGGER_BUCKETS,
@@ -578,22 +582,17 @@ def get_quarterly_fetch_ids(
 						CASE
 							WHEN newest_fiscal_date IS NULL THEN 'unknown'
 							WHEN swept AND gap <= %s THEN 'sweep'
-							WHEN gap >= %s THEN 'gap_too_old'
-							WHEN near_event IS NOT NULL THEN 'stale_event_near'
-							ELSE 'stale_no_event'
+							WHEN gap <= %s THEN 'fresh'
+							WHEN far_event IS NOT NULL AND gap < %s THEN 'suppressed'
+							WHEN staggered THEN
+								CASE
+									WHEN gap >= %s THEN 'gap_too_old'
+									WHEN near_event IS NOT NULL THEN 'stale_event_near'
+									ELSE 'stale_no_event'
+								END
+							ELSE 'waiting_stagger'
 						END AS reason
 					FROM cls
-					WHERE
-						-- sweep: revision-prone rows, 1/N rotating shard
-						(swept AND newest_fiscal_date IS NOT NULL AND gap <= %s)
-						-- no rows at all -> first fetch, always immediate
-						OR newest_fiscal_date IS NULL
-						-- stale AND not suppressed AND stagger shard hit
-						OR (
-							gap > %s
-							AND NOT (far_event IS NOT NULL AND gap < %s)
-							AND staggered
-						)
 				)
 				SELECT stock_id, reason FROM qf
 			""").format(
@@ -609,18 +608,19 @@ def get_quarterly_fetch_ids(
 				# shard params: sweep buckets/bucket, stagger buckets/bucket
 				QUARTERLY_SWEEP_BUCKETS, sweep_bucket,
 				QUARTERLY_STAGGER_BUCKETS, stagger_bucket,
-				# CASE params: sweep window, gap_too_old threshold
-				QUARTERLY_SWEEP_WINDOW_DAYS, MAX_SUPPRESSION_GAP_DAYS,
-				# WHERE params: sweep window, fresh window, suppression gap
+				# CASE params: sweep window, fresh window, suppression gap,
+				# gap_too_old threshold
 				QUARTERLY_SWEEP_WINDOW_DAYS,
 				QUARTERLY_FISCAL_WINDOW_DAYS, MAX_SUPPRESSION_GAP_DAYS,
+				MAX_SUPPRESSION_GAP_DAYS,
 			],
 		)
 		fetch_ids: set[int] = set()
 		reasons: dict[str, int] = {}
 		for stock_id, reason in cursor.fetchall():
-			fetch_ids.add(stock_id)
 			reasons[reason] = reasons.get(reason, 0) + 1
+			if reason in FETCH_REASON_LABELS:
+				fetch_ids.add(stock_id)
 		return fetch_ids, reasons
 	except Exception as err:
 		tb = traceback.extract_tb(err.__traceback__)[-1]

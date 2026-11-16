@@ -1,6 +1,7 @@
 import traceback
 
 from lib.module.printf import printf, level as lv
+from constants.pipeline import SYMBOL_COL_WIDTH
 
 DIVIDEND_DECIMALS = 6
 
@@ -32,7 +33,7 @@ def build_dividend_rows(symbol: str, stock_id: int, events: list[dict], latest_d
 			amount = round(float(event["amount"]), DIVIDEND_DECIMALS)
 			if amount == 0:
 				# 0 dividend = source corruption (e.g. rounded pre-split value), never real
-				printf(f"{symbol}: skip zero dividend event on {d}", lv.WARNING)
+				printf(f"{symbol:<{SYMBOL_COL_WIDTH}}: skip zero dividend event on {d}", lv.WARNING)
 				continue
 
 			rows.append({
@@ -44,7 +45,7 @@ def build_dividend_rows(symbol: str, stock_id: int, events: list[dict], latest_d
 		return rows
 	except Exception as err:
 		tb = traceback.extract_tb(err.__traceback__)[-1]
-		printf(f"{symbol}: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
+		printf(f"{symbol:<{SYMBOL_COL_WIDTH}}: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
 		return []
 
 
@@ -79,5 +80,5 @@ def build_split_rows(symbol: str, stock_id: int, events: list[dict], latest_date
 		return rows
 	except Exception as err:
 		tb = traceback.extract_tb(err.__traceback__)[-1]
-		printf(f"{symbol}: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
+		printf(f"{symbol:<{SYMBOL_COL_WIDTH}}: {err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
 		return []

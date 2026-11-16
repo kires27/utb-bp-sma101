@@ -45,7 +45,7 @@ exchanges = [
 	{"exchange_code": "Istanbul", "mic": "XIST", "short_name": "BIST", "long_name": "Borsa Istanbul", "country": "Turkey", "timezone": "Europe/Istanbul", "open_time": "10:00", "close_time": "18:00", "currency": "TRY"},
 	{"exchange_code": "TAI", "mic": "XTAE", "short_name": "TASE", "long_name": "Tel Aviv Stock Exchange", "country": "Israel", "timezone": "Asia/Jerusalem", "open_time": "09:59", "close_time": "17:14", "currency": "ILS"},
 	{"exchange_code": "Doha", "mic": "XDSM", "short_name": "QSE", "long_name": "Qatar Stock Exchange", "country": "Qatar", "timezone": "Asia/Qatar", "open_time": "09:30", "close_time": "13:30", "currency": "QAR"},
-	{"exchange_code": "Saudi", "mic": "XTAE", "short_name": "Tadawul", "long_name": "Saudi Stock Exchange (Tadawul)", "country": "Saudi Arabia", "timezone": "Asia/Riyadh", "open_time": "10:00", "close_time": "15:00", "currency": "SAR"},
+	{"exchange_code": "Saudi", "mic": "XSAU", "short_name": "Tadawul", "long_name": "Saudi Stock Exchange (Tadawul)", "country": "Saudi Arabia", "timezone": "Asia/Riyadh", "open_time": "10:00", "close_time": "15:00", "currency": "SAR"},
 
 	# --- Africa ---
 	{"exchange_code": "JNB", "mic": "XJSE", "short_name": "JSE", "long_name": "Johannesburg Stock Exchange", "country": "South Africa", "timezone": "Africa/Johannesburg", "open_time": "09:00", "close_time": "17:00", "currency": "ZAR"},
