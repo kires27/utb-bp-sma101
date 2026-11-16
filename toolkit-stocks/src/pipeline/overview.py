@@ -5,7 +5,7 @@ from lib.functions.stats import count_symbol, new_phase
 from lib.transforms import build_overview_row
 from lib.module.printf import printf, level as lv
 from lib.supabase.sql_functions import (
-	get_stock_overview_rows, get_stale_stock_ids, insert_data_statement,
+	get_stock_overview_rows, get_stale_stock_ids, insert_data_statement, update_row,
 )
 import constants.db_tables as dbt
 from constants.pipeline import OVERVIEW_MAX_AGE_DAYS
@@ -94,9 +94,19 @@ def run_overview(ctx):
 			if not changed:
 				stats["skipped_unchanged"] = stats.get("skipped_unchanged", 0) + 1
 				continue
-			row = {**changed, "symbol": symbol, "maintenance_update": datetime.now(timezone.utc)}
-		mode_condition = {} if ctx.stock_ids.get(symbol) is None else {"symbol": symbol}
-		rows_written = insert_data_statement(row, dbt.stock, update_condition=mode_condition, label=symbol)
+			# Partial update: changed cells + fresh stamp only. Must go
+			# through a plain UPDATE — an upsert of a partial row dies on
+			# the INSERT half (stock.name is NOT NULL with no default and
+			# Postgres evaluates the INSERT row before conflict resolution).
+			row = {**changed, "maintenance_update": datetime.now(timezone.utc)}
+		if ctx.stock_ids.get(symbol) is not None:
+			# Known symbol: UPDATE (partial after diff, full when the
+			# stored-row read failed and change detection was skipped).
+			rows_written = update_row(dbt.stock, row, {"symbol": symbol}, label=symbol)
+		else:
+			# Unknown symbol (discovery flow): full row insert; the name
+			# guard above guarantees NOT NULL columns are populated.
+			rows_written = insert_data_statement(row, dbt.stock, label=symbol)
 		count_symbol(stats, True, rows=rows_written)
 
 	refresh_ids(ctx)

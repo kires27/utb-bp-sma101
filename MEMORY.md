@@ -19,6 +19,7 @@
 - fqs phase (2026-11-02): quality score split from fa into own phase, runs strictly after `fa`. `build_financial_analysis` must NEVER write `quality_score` key (upsert would NULL it and wipe prior scores). `run_quality_score` loops targets, `build_quality_score` per symbol, one upsert `{quality_score, median_comparison}`. Peer data now fresh across the whole run (old code scored each symbol right after its own row write). Independently runnable for score-only reruns.
 
 # Gotchas & Lessons
+- Partial row + `query_upsert` = NotNullViolation (broke overview daily 2026-11-09..16): Postgres evaluates the INSERT row BEFORE conflict resolution, so an upsert missing a NOT NULL-no-default column (`stock.name`) dies even when the conflict branch would match. Overview changed-cell writes now use `update_row()` (plain UPDATE, `sql_functions.py`); rule: partial updates of existing rows NEVER go through INSERT-based upsert.
 - `fetch` is a reserved word in Postgres (same class as `from`/`to`): CTE named `fetch` errors with syntax error at 42P01. Rename (used `qf` in `get_quarterly_fetch_ids`).
 - Kire (`kwpzvlymmaczaixtjdbu`) = live SMA DB (web target); halite = older copy, do not write. Web writes need `SUPABASE_SECRET_KEY` → `useSupabaseAdmin`.
 - Yahoo's displayed OHLC is split-adjusted (volume too); `Adj Close` = split+dividend; as-traded needs `auto_adjust=False`.

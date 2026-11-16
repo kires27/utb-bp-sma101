@@ -762,6 +762,49 @@ def insert_data_statement(
 		cursor.close()
 
 
+def update_row(table: str, data: dict, keys: dict, label: str = "") -> int:
+	'''
+	Partial UPDATE of an existing row: only the given cells are set, all
+	other columns stay untouched. Unlike query_upsert there is no INSERT
+	evaluation step, so omitted NOT NULL columns (e.g. stock.name on
+	overview changed-cell writes) cannot trip the constraint — an upsert
+	of a partial row dies with NotNullViolation before conflict resolution.
+	Returns rows updated (0 when the row is gone).
+	'''
+	conn = get_connection()
+	cursor = conn.cursor()
+
+	try:
+		if not data or not keys:
+			raise ValueError("update_row needs both data and keys")
+
+		set_sql = sql.SQL(", ").join(
+			sql.SQL("{} = %s").format(sql.Identifier(col)) for col in data
+		)
+		where_sql = sql.SQL(" AND ").join(
+			sql.SQL("{} = %s").format(sql.Identifier(col)) for col in keys
+		)
+		query = sql.SQL("UPDATE {} SET {} WHERE {}").format(
+			sql.Identifier(table), set_sql, where_sql
+		)
+
+		cursor.execute(query, list(data.values()) + list(keys.values()))
+		updated = cursor.rowcount
+		conn.commit()
+		if updated == 0:
+			printf(f"{label}: update matched no row", lv.WARNING)
+		else:
+			printf(f"{label} updated".rstrip(), lv.INFO)
+		return updated
+	except Exception as err:
+		tb = traceback.extract_tb(err.__traceback__)[-1]
+		printf(f"{err} (File '{tb.filename}', line {tb.lineno})", lv.ERROR)
+		conn.rollback()
+		return 0
+	finally:
+		cursor.close()
+
+
 def insert_rows_bulk(
 	table: str,
 	rows: list[dict],

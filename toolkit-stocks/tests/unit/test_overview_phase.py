@@ -10,10 +10,12 @@ from pipeline.overview import _differs, run_overview
 
 
 class FakeCtx:
-	def __init__(self, symbols):
-		self.args = SimpleNamespace(force=False, full=False)
+	def __init__(self, symbols, known=True, force=False):
+		self.args = SimpleNamespace(force=force, full=False)
 		self.symbols = symbols
-		self.stock_ids = {s: i + 1 for i, s in enumerate(symbols)}
+		# known=False simulates symbols not yet in stock (discovery flow);
+		# without force they are dropped by the stale gate before any fetch
+		self.stock_ids = {s: i + 1 for i, s in enumerate(symbols)} if known else {}
 		self.symbol_meta = {}
 		self.yfs = FakeYfs()
 
@@ -54,7 +56,7 @@ def test_differs(new, old, expected):
 	assert _differs(new, old) is expected
 
 
-def _install_fakes(monkeypatch, existing_rows, inserted):
+def _install_fakes(monkeypatch, existing_rows, inserted, updated):
 	monkeypatch.setattr(ov, "get_stale_stock_ids", lambda ids, days: set(ids))
 	monkeypatch.setattr(ov, "get_stock_overview_rows", lambda ids: existing_rows)
 	monkeypatch.setattr(ov, "refresh_ids", lambda ctx: None)
@@ -63,11 +65,17 @@ def _install_fakes(monkeypatch, existing_rows, inserted):
 		inserted.append(row)
 		return 1
 
+	def fake_update(table, data, keys, label=""):
+		updated.append({**data, **keys})
+		return 1
+
 	monkeypatch.setattr(ov, "insert_data_statement", fake_insert)
+	monkeypatch.setattr(ov, "update_row", fake_update)
 
 
 def test_unchanged_profile_skips_write(monkeypatch):
 	inserted = []
+	updated = []
 	existing = {
 		"symbol": "AAA", "address": None, "description": None,
 		"employees": 123000, "industry": None, "key_executives": [],
@@ -76,16 +84,21 @@ def test_unchanged_profile_skips_write(monkeypatch):
 		"exchange": None, "city": None, "country": None, "zip": None,
 		"statement_currency": None,
 	}
-	_install_fakes(monkeypatch, {"AAA": existing}, inserted)
+	_install_fakes(monkeypatch, {"AAA": existing}, inserted, updated)
 
 	stats = run_overview(FakeCtx(["AAA"]))
 
 	assert inserted == []
+	assert updated == []
 	assert stats["skipped_unchanged"] == 1
 
 
 def test_changed_profile_writes_partial_row(monkeypatch):
+	# Regression: a partial update must go through UPDATE, never the INSERT
+	# half of an upsert (stock.name is NOT NULL -> NotNullViolation before
+	# conflict resolution; broke the daily workflow 2026-11-16).
 	inserted = []
+	updated = []
 	existing = {
 		"symbol": "AAA", "address": None, "description": None,
 		"employees": 999, "industry": None, "key_executives": [],
@@ -94,12 +107,13 @@ def test_changed_profile_writes_partial_row(monkeypatch):
 		"exchange": None, "city": None, "country": None, "zip": None,
 		"statement_currency": None,
 	}
-	_install_fakes(monkeypatch, {"AAA": existing}, inserted)
+	_install_fakes(monkeypatch, {"AAA": existing}, inserted, updated)
 
 	stats = run_overview(FakeCtx(["AAA"]))
 
-	assert len(inserted) == 1
-	row = inserted[0]
+	assert inserted == []
+	assert len(updated) == 1
+	row = updated[0]
 	# only the changed cell + key + fresh stamp; nothing else touched
 	assert set(row) == {"employees", "symbol", "maintenance_update"}
 	assert row["employees"] == 123000
@@ -110,13 +124,32 @@ def test_changed_profile_writes_partial_row(monkeypatch):
 
 def test_new_symbol_writes_full_row(monkeypatch):
 	inserted = []
-	_install_fakes(monkeypatch, {}, inserted)
+	updated = []
+	_install_fakes(monkeypatch, {}, inserted, updated)
 
-	stats = run_overview(FakeCtx(["NEW"]))
+	stats = run_overview(FakeCtx(["NEW"], known=False, force=True))
 
+	assert updated == []
 	assert len(inserted) == 1
 	row = inserted[0]
 	assert row["name"] == "NEW Inc"
 	assert row["sector"] == "Technology"
 	assert row["maintenance_update"] is not None
+	assert "skipped_unchanged" not in stats
+
+
+def test_known_symbol_without_stored_row_updates_full_row(monkeypatch):
+	# stored-row read failed (empty map): known symbol keeps the full fetched
+	# row and still goes through UPDATE (NOT NULL columns all present).
+	inserted = []
+	updated = []
+	_install_fakes(monkeypatch, {}, inserted, updated)
+
+	stats = run_overview(FakeCtx(["AAA"]))
+
+	assert inserted == []
+	assert len(updated) == 1
+	row = updated[0]
+	assert row["name"] == "AAA Inc"
+	assert row["symbol"] == "AAA"
 	assert "skipped_unchanged" not in stats
