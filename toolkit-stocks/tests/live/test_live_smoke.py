@@ -20,6 +20,7 @@ from lib.transforms import (
 
 SYMBOL_US = "AAPL"
 SYMBOL_INTL = "ASML.AS"
+SYMBOL_GBP = ["HSBA.L", "BP.L", "AZN.L"]
 
 pytestmark = pytest.mark.live
 
@@ -77,12 +78,8 @@ def test_quotes_batch_invariants():
 
 def test_quotes_batch_gbp_scaling():
 	'''GBp-quoted symbols: price and change scaled to GBP, label normalized.'''
-	from data.symbols import manual_symbols
-
-	gbp_syms = [s for s in manual_symbols if s.endswith(".L")][:3]
-	assert gbp_syms, "no GBP symbols in dev list"
 	src = QuotesBatchSource()
-	quotes = src.fetch(gbp_syms)
+	quotes = src.fetch(SYMBOL_GBP)
 	for sym, q in quotes.items():
 		assert q["currency"] == "GBP", f"{sym}: currency not normalized ({q['currency']})"
 		assert q["stock_price"] < q["market_cap"], f"{sym}: GBp price not scaled (price={q['stock_price']}, mcap={q['market_cap']})"

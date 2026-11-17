@@ -1,43 +1,30 @@
 # Pracovní deník
 
-## 6.11.2026
-FX konverze FA metrik: nová fáze `fx` (Yahoo `{CCY}=X`, tabulka `fx_rate`, 19 párů vs USD) běží před `fa`; `pe_ratio`/`pb_ratio`/`assets_price` škálují statement-side hodnoty na trading měnu přes `fx_rate_for` (r(trading)/r(stmt)), chybějící kurz → NULL. `stock.statement_currency` (financialCurrency) nově plní overview fáze. Sloupce `from`/`to` jsou reserved words v Postgresu — zápisy jen přes RowFlusher.
+## 16.11.2026
+Vylepšen vzhled logování.
+Opraven "type bug" v databázové funkce `on_new_split`.
 
-Market status badge: `stock_exchange` měl RLS bez žádných policy (neviditelné pro API role) — migrace přidává public SELECT policy + SELECT-only grants. Web: `getExchangeInfo()` v `#shared/query/stock.js`, endpoint `/api/stock/[symbol]` vrací `exchange_info`, client util `marketStatus.js` (open/closed přes IANA tz, „Updated 14:32“). Exchange seed rozšířen o lunch breaky (Tokyo, HKEX, Shanghai, KRX, SGX).
+## 13.11.2026
+Zahraniční akcie se teď správně přepočítávají do jejich obchodní měny — kurzy se stahují automaticky, takže poměry jako cena/zisk fungují i pro firmy vykazující v jiné měně.
+Nový indikátor, jestli burza dané akcie má zrovna otevřeno nebo zavřeno (včetně polední pauzy u asijských burz), s časem poslední aktualizace ceny.
+Hodnocení kvality firem už neporovnává metriky mezi různými měnami. Drobné opravy zaokrouhlení čísel a rozšířená stránka vnitřní hodnoty akcie.
 
-Quality score currency fix: `earnings_per_share` a `revenues_per_share` vyňaty z GROUPS (nerovnávají se cross-currency), váhy re-distribuovány.
+## 8.11.2026
+Tržní kapitalizace se nově počítá vlastním výpočtem (cena × počet akcií z výkazů).
+Oprava ceny londýnských akcií: některé se uvádějí v pencích místo liber, teď se to správně přepočítává.
+Nedávné kvartální výsledky firem se průběžně doplňují — každý den se obnoví část akcií, takže pokud firma své výsledky zpětně opraví, změna se projeví nejpozději do týdne.
+Sběr dat je rychlejší a šetří požadavky díky menšímu počtu dotazů. Vylepšeno shrnutí běhu — ukazuje i počet dotazů do databáze a Yahoo. Zjednodušené ovládání nástroje a přepsaná dokumentace. Úklid v databázi (přejmenování tabulek výkazů, nové sloupce).
 
-Drobné: ceny zaokrouhleny na 4 dp, volume na int, quote 2 dp, dividenda 6 dp (float64 šum v numeric sloupcích; golden fixture regenerovány). Oprava fetch parametrů historie (`1D`→`1d`, `3M`→`3mo`, …) + `YFRateLimitError` import. `verify.py` zjednodušen na jeden `quote` mód (FA check zrušen), opraveno dvojité počítání no_q skipů a UTC/local date posun. Workflows (daily, discover) přeladěny na `fx` + nový verify mód. Web: intrinsic-value endpoint/page rozšířeny.
-
-## 5.11.2026
-Přejmenování tabulek výkazů: `stock_balance_sheet` → `stock_statement_balance`, `stock_cash_flow` → `stock_statement_cash`, `stock_income_statement` → `stock_statement_income` (kire DB + `db_tables.py` + regenerované `web/app/types/database.types.ts`; nové `updated_at` sloupce, `stock_dividend.split_adjusted_on`).
-
-Kvartální výkazy: přidán „staggered revision sweep“ — každý den se refetchuje 1/7 rotujícího shardu revizí-zranitelných symbolů (deterministicky `stock_id mod 7 == dnešní bucket`, žádný stav, žádné nové cron joby). Chytá restatements/adjustmenty nedávných kvartálů, které nemají signál v earnings kalendáři; nejhorší lag revize klesá z ~95d fresh okna na ~7 dní. `get_quarterly_fetch_ids` má nový sweep branch (ignoruje suppression, vyžaduje známé řádky v rámci 180d sweep okna); pure logika `quarterly_fetch_decision(swept)` rozšířena o tentýž branch.
-
-market_cap provenance: vlastní výpočet (stock_price × nejnovější `share_issued` z `stock_statement_balance`, při stejném fiscal_date kvartál vyhrává nad FY přes `period::text DESC`) je primární; Yahoo marketCap jen fallback při chybějících vstupech. Divergence >2 % loguje WARNING (log-only, vlastní hodnota vždy vyhrává — Yahoo bývá stale strana; Samsung, zahraniční filings). Self-heal: `get_missing_market_caps` přepíše sticky NULL market_cap řádky i v closed market (Yahoo občas marketCap v batch odpovědi vynechá). Japonsko caveat: issued zahrnuje treasury shares do zrušení → mírné nadhodnocení při buybacku.
-
-GBp fix: u pence-quoted symbolů (LSE) se dělí /100 i `regularMarketChange` (dřív jen cena) a currency label se normalizuje na ISO `GBP`; `currency` nově putuje do `stock_quote` řádků. Opraveno v quotes_batch i yfinance_source.
-
-fqs: run-scoped cache peer sad a FA bloků (`reset_quality_cache()` na začátku fáze) — bez ní se stejná peer data refetchovala pro každý symbol zvlášť. Safe, protože fqs běží striktně po fa. Per-symbol hlavička v logu.
-
-Monitoring: runner jede každou fázi přes `_with_net` a do stats štampuje delty DB/yfinance requestů — zobrazeny v summary řádku i GitHub step summary tabulce (nové sloupce `db req` / `yf req`). Nový `lib/functions/netstats.py` snapshot. `--log` flag: soubor `.log` do `log/` jen když se explicitně chce (konzole nezměněna). `get_latest_dates` pro ceny se volá jednou batchem na celý market_data run (dřív 1 query na symbol).
-
-Ostatní: flake8 kompletně odstraněn (`.flake8`, `toolkit-stocks/.flake8`). README přepsáno na nové `--phases` CLI (původní `--run hourly|daily|backfill` zrušeno — volbu fází teď dělá komma-list, pořadí je pevné v runneru). AGENTS.md doplněn o market_cap provenance. Nový `test_quotes_batch.py`; aktualizovány testy sweep/gating/run_stats/transforms/live smoke. Workflows po commitu `update workflows`/`fix after fetch verification` přeladěny na `--phases`.
+## 4.11.2026
+Výpočty finančních metrik využívají už uložené ceny z databáze místo opakovaného stahování, běh je výrazně rychlejší a šetří požadavky.
+Dividendový výnos se počítá z vlastních dat a nestahuje se z Yahoo (spolehlivější).
+Hodnocení kvality firem (FQS) je odděleno do samostatného kroku a běží až po výpočtu metrik. 
 
 ## 2.11.2026
-FA fáze čte tržní data z `stock_quote` místo per-symbol yfinance volání (plan `PLAN-fa-metric-price.md`). Smazán `yf_quote` closure a `yfs.map_symbols`, místo toho jeden bulk read přes nové `get_metric_quotes(stock_ids)` (vrací jen `{stock_price, market_cap}`); chybějící řádek / null price / null market_cap = skip symbolu s chybou pojmenovávající chybějící pole (žádný fallback fetch, screener symboly dostanou FA až v dalším daily runu).
-
-Zrušeno (týž den): původně přidaný sloupec `stock_quote.dividend_yield` — redundantní, `stock_financial_analysis.dividend_yield` už hodnotu ukládá. Sloupec dropped (kire DB + `sql/2026-11-02_stock_quote_dividend_yield.sql` přepsán na DROP). dividend_yield nyní FA počítá sama: nové `get_ttm_dividends(stock_id)` (SUM přes `stock_dividend`, rolling 365 dní, split-adjusted) ÷ aktuální cena v `build_financial_analysis`; `fac.dividend_yield(ttm, price)` — 0/None ttm nebo cena → NULL (non-payer). Zdroje quote dictů (quotes_batch, yfinance_source) už yield nenesou. Smoke: AAPL ttm 1.06 → 0.31 % při 338.32 (sedí s původním Yahoo 0.0031); MSFT ttm 0 (dividenda historie se dofetche v dalším dividends runu).
-
-Dále: quality score vyčleněn do vlastní fáze `fqs` (po `fa`, jen přes ní). Důvod: `insert_and_score` dělal 2 upserty na symbol (FA řádek + score) a score se počítal hned po zápisu vlastního řádku — peer normalizace četla pro portionu vesmíru stará data. Nyní `fa` píše čisté FA metriky (`build_financial_analysis` už nepíše `quality_score: None` — jinak by upsert scores z předchozích runů přemazal), `fqs` fáze (`pipeline/quality_score.py`, `run_quality_score`) projde všechny symboly a upsertuje `{quality_score, median_comparison}` přes `build_quality_score`. Výhody: 1 upsert fáze na symbol, peer data vždy čerstvá celého runu, `fqs` nezávisle spustitelná (re-score bez refetch). Daily i manual-backfill workflow + AGENTS.md příklady rozšířeny o `fqs`. Test suite 172 passed, 6 skipped (nový `test_fqs_phase.py`).
+Nový DB trigger při splitu = přepočítá starší dividendy a historické ceny.
 
 ## 28.10.2026
-Rebasing dividendů při novém splitu přes DB trigger: `stock_dividend` má sloupec `split_adjusted_on` (default `now()`, guard proti dvojímu dělení), AFTER INSERT trigger `trg_stock_split_recalc` na `stock_split` přepočítá starší dividenda řádky (dělení faktorem) přímo v databazi — bez refetch. `build_split_rows` řadí eventy od nejstaršího (pořadí insertu je kritické). Ověřeno syntetickým testem (2 splits × 2.0 → ÷4, rollback). Dokumentace v AGENTS.md, migrace `sql/2026-10-28_split_trigger_recalc.sql`.
-
-Doplněno: trigger rozšířen i na `stock_historical_price` (OHLC ÷factor, volume ×factor, `split_adjusted_on` stamp). Ověřeno, že DefeatBeta parquet i yfinance (auto_adjust=False) dodávají ceny už split-adjustované (NVDA pre-split ~120, ne ~1200; 9432.T bez false dropu na 25:1). Syntetický test na 8316.T (factor 2): ceny ÷2, objemy ×2, dividendy ÷2, rollback. Regresní run `--dev --fetch dividends splits`: NVDA 2012 dividenda 0.001875 beze změny; reálný split 8316.T 2026-09-29 rebasován (2461 řádků, stamp 2026-09-29). Test suite 105 passed, 1 skipped. Pozn.: dividenda řádky 8316.T rebasovány=0 — správně, vloženy ve stejném runu s `now()` stampem (amounty už split zahrnují), guard je přeskočil; ceny vložené před splitem byly rebasovány. Commit zatím neproveden (čeká na schválení).
-
-## 26.10.2026
-Přepsání historických tržních dat: flag `--force` pro fáze dividends/splits/prices = přepis celé historie přes upsert (bez `--force` jen přírůstkové přidávání). Odstraněn sloupec `adj_close` z databáze i kódu: ceny jsou čisté as-traded OHLCV, adjustace se dopočítá podle potřeby z tabulek dividend a splitů (žádná stale data). Lepší logování failoveru (počty symbolů na zdroj), oprava pádu při částečném `--fetch`. DefeatBeta nově plně pokrývá historické ceny.
+Nová funkce: přepsání historických tržních dat přes flag `--force` pro fáze dividends/splits/prices = přepis celé historie. Odstraněn sloupec `adj_close` z databáze.
 
 ## 25.10.2026
 Limit historie cen na 10 let. Mazání starších řádků jako 10 let, řešeno v Supabase přes pg_cron. Uvolnění místa v databázi pro důležitější věci.

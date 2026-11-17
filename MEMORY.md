@@ -2,7 +2,7 @@
 
 # Preferences
 - Terse, no-filler. No emojis. No em dash.
-- Work-log: Czech, newest-first, one feature per day.
+- Work-log: Czech, newest-first, one feature per day. Style: plain language for NON-technical readers — no table/function/file/SQL names, no code identifiers; short bullets per feature stating what changed and why (the benefit). Technical details stay in AGENTS.md/git, never in worklog.
 
 # Decisions
 - Market status badge DONE (2026-11-06): `stock_exchange` had RLS but ZERO policies (invisible to API roles) + full DML grants on anon/authenticated. Migration `toolkit-stocks/sql/2026-11-06_stock_exchange_read_policy.sql` (applied via MCP): public SELECT policy, grants tightened to SELECT-only. Web: `getExchangeInfo()` in `#shared/query/stock.js`; `server/api/stock/[symbol].get.js` returns `exchange_info` + Cache-Control 86400. Client `web/app/utils/marketStatus.js`: `getMarketStatus` (exchange IANA tz via Intl, week_pattern scan), `formatUpdatedAt` = "Updated 14:32" / "Updated 5 Nov, 14:32" (user: no elapsed time). No holiday/lunch-break data: may show open on holidays.
