@@ -48,9 +48,11 @@ concept
 .vscode
 src/data_cache/
 toolkit-stocks/sql
-TODO.md
 log/
 .playwright-mcp
 run_summary.txt
+AGENTS.md
+TODO.md
 MEMORY.md
+PLAN*.md
 worklog.md
